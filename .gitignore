@@ -1,0 +1,26 @@
+# Build artifacts
+build/
+bin/
+*.o
+*.a
+*.so
+.depend
+src/glaurung/pointchess
+src/glaurung/perft_test
+
+# Large binaries exceeding GitHub limits
+tools/stockfish_19
+pointchess_debug
+pointchess_asan
+
+# PyTorch checkpoints and caches
+checkpoints/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Logs and temporary datasets
+*.log
+*.tmp
+training/data/
+training/training_data.txt

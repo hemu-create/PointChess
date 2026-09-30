@@ -1,0 +1,14 @@
+Searching: r4rk1/1b2qppp/p1n1p3/1p6/1b1PN3/3BRN2/PP3PPP/R2Q2K1 b - -
+infinite: 1 ponder: 0 time: 0 increment: 0 moves to go: 0
+ 2     +0.49   00:00      227 Rad8 Neg5 Nxd4 Bxh7+ Kh8 
+ 3     +0.24   00:00     1040 Rad8 a3 Ba5 
+ 4     +0.25   00:00     2667 Rad8 a3 Ba5 b4 
+ 5     +0.37   00:00     5296 Rad8 a3 Ba5 b4 Bc7 
+ 6     +0.29   00:00    10987 Rad8 a3 Ba5 Nc5 Nxd4 Bxh7+ Kxh7 Nxb7 
+ 7  21053762.00   00:00    16981 Rad8 a3 Ba5 Nc5 Nxd4 Bxh7+ Kxh7 Nxb7 Bd2 Nxd8 
+                              Bxe3 Nxd4 Bxd4 Qxd4 Rxd8 
+Nodes: 30000
+Nodes/second: 2500000
+Best move: Rad8
+Ponder move: a3
+
