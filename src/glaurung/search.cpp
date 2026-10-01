@@ -227,7 +227,8 @@ namespace {
   /// Functions
 
   void id_loop(const Position &pos, Move searchMoves[]);
-  Value root_search(Position &pos, SearchStack ss[], RootMoveList &rml);
+  Value root_search(Position &pos, SearchStack ss[], RootMoveList &rml,
+                    Value alpha, Value beta);
   Value search_pv(Position &pos, SearchStack ss[], Value alpha, Value beta,
                   Depth depth, int ply, int threadID);
   Value search(Position &pos, SearchStack ss[], Value beta,
@@ -609,8 +610,38 @@ namespace {
 
       std::cout << "info depth " << Iteration << std::endl;
 
+      // Aspiration search (Stockfish-style, cf. tools/sf_ref/search.cpp):
+      // start with a narrow window around the previous iteration's score
+      // and widen progressively on fail low/high.  Full window at low
+      // depths where it costs nothing.
+      Value prev = ValueByIteration[Iteration - 1];
+      Value alpha, beta, result;
+      int delta;
+      if (Iteration >= 5) {
+        delta = Value(25);
+        alpha = Max(prev - delta, -VALUE_INFINITE);
+        beta = Min(prev + delta, VALUE_INFINITE);
+      } else {
+        alpha = -VALUE_INFINITE;
+        beta = VALUE_INFINITE;
+        delta = Value(0);
+      }
+      while (true) {
+        result = root_search(p, ss, rml, alpha, beta);
+        if (AbortSearch)
+          break;
+        if (result <= alpha) {
+          beta = alpha;
+          alpha = Max(result - delta, -VALUE_INFINITE);
+        } else if (result >= beta) {
+          beta = Min(result + delta, VALUE_INFINITE);
+        } else
+          break;
+        delta = delta + delta / 2; // widen ~1.5x, cf. SF delta += 47*delta/128
+        if (delta <= Value(0)) delta = Value(25);
+      }
       // Search to the current depth
-      ValueByIteration[Iteration] = root_search(p, ss, rml);
+      ValueByIteration[Iteration] = result;
 
       // Erase the easy move if it differs from the new best move
       if(ss[0].pv[0] != EasyMove)
@@ -711,8 +742,13 @@ namespace {
   // scheme (perhaps we should try to use this at internal PV nodes, too?)
   // and prints some information to the standard output.
 
-  Value root_search(Position &pos, SearchStack ss[], RootMoveList &rml) {
-    Value alpha = -VALUE_INFINITE, beta = VALUE_INFINITE, value;
+  // Aspiration window bounds are passed in from id_loop (Stockfish-style).
+  // On entry alpha/beta bracket the previous iteration's score; on fail
+  // low/high id_loop widens and re-searches.  Adapted from Stockfish
+  // search.cpp (GPL-3.0, "derived from Glaurung 2.1"); see tools/sf_ref/.
+  Value root_search(Position &pos, SearchStack ss[], RootMoveList &rml,
+                    Value alpha, Value beta) {
+    Value value;
     Bitboard dcCandidates = pos.discovered_check_candidates(pos.side_to_move());
 
     // Loop through all the moves in the root move list:

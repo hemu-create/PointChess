@@ -1,0 +1,7 @@
+Reference files borrowed from Stockfish 19 for study/porting.
+Source: https://github.com/official-stockfish/Stockfish (tag sf_19)
+License: GPL-3.0-or-later (same as PointChess/Glaurung).
+Files: search.cpp, search.h, timeman.cpp, timeman.h, movepick.cpp,
+       movepick.h, history.h, tt.h
+These are READ-ONLY references in tools/sf_ref/ — not compiled.
+Ported ideas re-implemented in src/glaurung/search.cpp carry GPL headers.
