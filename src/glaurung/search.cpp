@@ -932,7 +932,7 @@ namespace {
       else {
         if(depth >= 2*OnePly && ext == Depth(0) && moveCount >= 3
            && !moveIsCapture && !move_promotion(move)
-           && !moveIsPassedPawnPush && !move_is_castle(move)) {
+           && !moveIsPassedPawnPush && !move_is_castle(move) && !moveIsCheck) {
           int d_idx = Min(63, int(depth / OnePly));
           int mc_idx = Min(63, moveCount);
           Depth r = LMRTable[1][d_idx][mc_idx];
@@ -1213,7 +1213,7 @@ namespace {
       
       if(depth >= 2*OnePly && ext == Depth(0) && moveCount >= 2
          && !moveIsCapture && !move_promotion(move) && !moveIsPassedPawnPush
-         && !move_is_castle(move)) {
+         && !move_is_castle(move) && !moveIsCheck) {
         int d_idx = Min(63, int(depth / OnePly));
         int mc_idx = Min(63, moveCount);
         Depth r = LMRTable[0][d_idx][mc_idx];
@@ -1332,6 +1332,12 @@ namespace {
       bestValue = staticValue;
       if(bestValue >= beta)
         return bestValue;
+
+      // Delta pruning: If static eval is hopelessly below alpha, skip non-check moves
+      if(bestValue < alpha - QueenValueMidgame - Value(200)
+         && pos.non_pawn_material(pos.side_to_move()) > Value(0))
+        return alpha;
+
       if(bestValue > alpha)
         alpha = bestValue;
     }
@@ -1376,11 +1382,8 @@ namespace {
         }
       }
 
-      // Don't search captures and checks with negative SEE values.
-      if(!isCheck && !move_promotion(move) &&
-         pos.midgame_value_of_piece_on(move_from(move)) >
-         pos.midgame_value_of_piece_on(move_to(move)) &&
-         pos.see(move) < 0)
+      // Don't search captures with negative SEE values (losing trades):
+      if(!isCheck && !move_promotion(move) && !moveIsCheck && pos.see(move) < 0)
         continue;
 
       // Make and search the move.
