@@ -6,6 +6,7 @@
 
 #include "../glaurung/position.h"
 #include "../nnue/nnue_arch.h"
+#include "pointbeta_eval.h"
 
 namespace pointchess {
 namespace nnue {
@@ -46,12 +47,19 @@ struct NNUEEvalCache {
 };
 inline NNUEEvalCache& nnue_cache() { static NNUEEvalCache c; return c; }
 
-// Evaluate a position using Modern HalfKAv2 NNUE
+// Evaluate a position using Modern HalfKAv2 or PointBeta NNUE
 inline Value evaluate_nnue(const Position& pos) {
     uint64_t key = uint64_t(pos.get_key()) ^ (pos.side_to_move() == WHITE ? 0x9e3779b97f4a7c15ULL : 0);
     bool found = false;
     Value cached = nnue_cache().lookup(key, found);
     if (found) return cached;
+
+    if (pointbeta::GlobalPointBeta.is_loaded()) {
+        Value pb_val = pointbeta::evaluate_pointbeta(pos);
+        nnue_cache().store(key, pb_val);
+        return pb_val;
+    }
+
     Square w_ksq = pos.king_square(WHITE);
     Square b_ksq = pos.king_square(BLACK);
 

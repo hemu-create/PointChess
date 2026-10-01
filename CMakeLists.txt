@@ -43,6 +43,7 @@ set(POINTCHESS_SOURCES
     src/glaurung/san.cpp
     src/glaurung/benchmark.cpp
     src/nnue/nnue.cpp
+    src/nnue/pointbeta.cpp
     src/eval/backend.cpp
     src/tools/selfplay_gen.cpp
 )

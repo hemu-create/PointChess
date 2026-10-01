@@ -463,7 +463,7 @@ void think(const Position &pos, bool infinite, bool ponder, int time,
     InfiniteSearch = true; // HACK
   }
   else
-    NodesBetweenPolls = (time > 0 && time < 2000) ? 256 : 1000;
+    NodesBetweenPolls = (time > 0 && time < 2000) ? 16 : 128;
 
   // We're ready to start thinking.  Call the iterative deepening loop
   // function:

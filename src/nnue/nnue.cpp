@@ -3,6 +3,7 @@
 // 11.5-Million Parameter Modern HalfKAv2 NNUE Inference Engine
 
 #include "nnue_arch.h"
+#include "pointbeta.h"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -273,6 +274,16 @@ bool NNUEEvaluation::load_pchess_file(const std::string& filepath) {
     char magic[32] = {0};
     file.read(magic, 24);
     std::string ms(magic, 24);
+    if (ms.find("POINTBETA") != std::string::npos) {
+        file.close();
+        if (pointbeta::GlobalPointBeta.load_file(filepath)) {
+            ActiveFTSize = 4096;
+            network_loaded = true;
+            current_file = filepath;
+            return true;
+        }
+        return false;
+    }
     if (ms.find("POINTCHESS_V3") != std::string::npos) {
         int32_t ft = 0;
         file.read(reinterpret_cast<char*>(&ft), sizeof(ft));
