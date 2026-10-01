@@ -685,8 +685,12 @@ namespace {
                 << " hashfull " << TT.full() << std::endl;
 
     // Print the best move and the ponder move to the standard output:
-    std::cout << "bestmove " << ss[0].pv[0];
-    if(ss[0].pv[1] != MOVE_NONE)
+    Move bestMove = ss[0].pv[0];
+    if(bestMove == MOVE_NONE && rml.move_count() > 0)
+      bestMove = rml.get_move(0);
+
+    std::cout << "bestmove " << bestMove;
+    if(ss[0].pv[1] != MOVE_NONE && bestMove == ss[0].pv[0])
       std::cout << " ponder " << ss[0].pv[1];
     std::cout << std::endl;
 
