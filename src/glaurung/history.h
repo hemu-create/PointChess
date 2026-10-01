@@ -42,9 +42,9 @@ class History {
 public:
   History();
   void clear();
-  void success(Piece p, Move m, Depth d);
-  void failure(Piece p, Move m, Depth d);
-  int move_ordering_score(Piece p, Move m) const;
+  void success(Piece p, Move m, Depth d, Move prevMove = MOVE_NONE, Piece prevP = NO_PIECE);
+  void failure(Piece p, Move m, Depth d, Move prevMove = MOVE_NONE, Piece prevP = NO_PIECE);
+  int move_ordering_score(Piece p, Move m, Move prevMove = MOVE_NONE, Piece prevP = NO_PIECE) const;
   bool ok_to_prune(Piece p, Move m, Depth d) const;
 
   void update_countermove(Move prevMove, Move refutation);
@@ -55,6 +55,7 @@ private:
   int successCount[16][64];
   int failureCount[16][64];
   Move countermoves[64][64];
+  int contHistory[16][64][16][64]; // [prevPiece][prevTo][currPiece][currTo]
 };
 
 

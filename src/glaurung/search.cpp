@@ -932,12 +932,13 @@ namespace {
     }
 
     Move prevMove = (ply > 0) ? ss[ply-1].currentMove : MOVE_NONE;
+    Piece prevPiece = (prevMove != MOVE_NONE && move_is_ok(prevMove)) ? pos.piece_on(move_to(prevMove)) : NO_PIECE;
     Move countermove = H.get_countermove(prevMove);
 
     // Initialize a MovePicker object for the current position, and prepare
     // to search all moves:
     MovePicker mp = MovePicker(pos, true, ttMove, ss[ply].mateKiller,
-                               ss[ply].killer1, ss[ply].killer2, depth, countermove);
+                               ss[ply].killer1, ss[ply].killer2, depth, countermove, prevMove, prevPiece);
     Move move, movesSearched[256];
     int moveCount = 0;
     Value value, bestValue = -VALUE_INFINITE;
@@ -1059,9 +1060,9 @@ namespace {
                && !move_promotion(movesSearched[i])
                && !move_is_ep(movesSearched[i]))
               H.failure(pos.piece_on(move_from(movesSearched[i])),
-                        movesSearched[i], depth);
+                        movesSearched[i], depth, prevMove, prevPiece);
 
-          H.success(pos.piece_on(move_from(m)), m, depth);
+          H.success(pos.piece_on(move_from(m)), m, depth, prevMove, prevPiece);
           if(ply > 0 && ss[ply-1].currentMove != MOVE_NONE)
             H.update_countermove(ss[ply-1].currentMove, m);
           
@@ -1234,12 +1235,13 @@ namespace {
     }
 
     Move prevMove = (ply > 0) ? ss[ply-1].currentMove : MOVE_NONE;
+    Piece prevPiece = (prevMove != MOVE_NONE && move_is_ok(prevMove)) ? pos.piece_on(move_to(prevMove)) : NO_PIECE;
     Move countermove = H.get_countermove(prevMove);
 
     // Initialize a MovePicker object for the current position, and prepare
     // to search all moves:
     MovePicker mp = MovePicker(pos, false, ttMove, ss[ply].mateKiller,
-                               ss[ply].killer1, ss[ply].killer2, depth, countermove);
+                               ss[ply].killer1, ss[ply].killer2, depth, countermove, prevMove, prevPiece);
     Move move, movesSearched[256];
     int moveCount = 0;
     Value value, bestValue = -VALUE_INFINITE, futilityValue = VALUE_NONE;
@@ -1335,6 +1337,11 @@ namespace {
         }
       }
 
+      // Negative SEE pruning on quiet moves at shallow depths:
+      if (depth <= 4*OnePly && ext == Depth(0) && !moveIsCapture && !moveIsCheck
+          && !move_promotion(move) && pos.see(move) < 0)
+        continue;
+
       // Make and search the move.
       pos.do_move(move, u, dcCandidates);
       
@@ -1344,8 +1351,13 @@ namespace {
         int d_idx = Min(63, int(depth / OnePly));
         int mc_idx = Min(63, moveCount);
         Depth r = LMRTable[0][d_idx][mc_idx];
-        if(move == ss[ply].killer1 || move == ss[ply].killer2)
+        if(move == ss[ply].killer1 || move == ss[ply].killer2 || move == countermove)
           r = Max(Depth(0), r - OnePly);
+
+        int hist = H.move_ordering_score(pos.piece_on(move_to(move)), move, prevMove, prevPiece);
+        if (hist > 4000) r = Max(Depth(0), r - OnePly);
+        else if (hist < -4000) r += OnePly;
+
         if(r >= newDepth) r = newDepth - OnePly;
         ss[ply].reduction = r;
         value = -search(pos, ss, -(beta-1), newDepth - r, ply+1, true,
@@ -1405,8 +1417,8 @@ namespace {
                && !move_promotion(movesSearched[i])
                && !move_is_ep(movesSearched[i]))
               H.failure(pos.piece_on(move_from(movesSearched[i])),
-                        movesSearched[i], depth);
-          H.success(pos.piece_on(move_from(m)), m, depth);
+                        movesSearched[i], depth, prevMove, prevPiece);
+          H.success(pos.piece_on(move_from(m)), m, depth, prevMove, prevPiece);
           if(ply > 0 && ss[ply-1].currentMove != MOVE_NONE)
             H.update_countermove(ss[ply-1].currentMove, m);
           

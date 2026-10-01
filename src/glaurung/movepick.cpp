@@ -77,7 +77,7 @@ namespace {
 /// move ordering is at the current node.
 
 MovePicker::MovePicker(Position &p, bool pvnode, Move ttm, Move mk,
-                       Move k1, Move k2, Depth dpth, Move cm) {
+                       Move k1, Move k2, Depth dpth, Move cm, Move prevM, Piece prevP) {
   pos = &p;
   pvNode = pvnode;
   ttMove = ttm;
@@ -85,6 +85,8 @@ MovePicker::MovePicker(Position &p, bool pvnode, Move ttm, Move mk,
   killer1 = k1;
   killer2 = k2;
   countermove = cm;
+  prevMove = prevM;
+  prevPiece = prevP;
   depth = dpth;
   movesPicked = 0;
   numOfMoves = 0;
@@ -285,7 +287,7 @@ void MovePicker::score_noncaptures() {
     else if(m == countermove)
       moves[i].score = HistoryMax + 1;
     else
-      moves[i].score = H.move_ordering_score(pos->piece_on(move_from(m)), m);
+      moves[i].score = H.move_ordering_score(pos->piece_on(move_from(m)), m, prevMove, prevPiece);
   }
 }
 
