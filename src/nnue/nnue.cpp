@@ -125,10 +125,35 @@ inline int64_t dot_i32_i8_avx2(const int32_t* a, const int8_t* b, int n) {
 int NNUEEvaluation::evaluate_accumulators(const BigAccumulator& us_acc, const BigAccumulator& them_acc) {
     // 1. SCReL Activation on 11.5M Accumulator outputs: 512 inputs (256 us + 256 them)
     alignas(64) int32_t l0_out[BIG_ACCUMULATOR_SIZE * 2];
+#if defined(__AVX2__)
+    __m256i zero = _mm256_setzero_si256();
+    __m256i max127 = _mm256_set1_epi16(127);
+    auto process_half = [&](const int16_t* in_vals, int32_t* out_vals) {
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE; i += 16) {
+            __m256i v = _mm256_load_si256((const __m256i*)(in_vals + i));
+            __m256i clamped = _mm256_min_epi16(_mm256_max_epi16(v, zero), max127);
+            
+            // Lower 8 int16 -> int32
+            __m128i lo16 = _mm256_castsi256_si128(clamped);
+            __m256i lo32 = _mm256_cvtepi16_epi32(lo16);
+            __m256i sq_lo = _mm256_srli_epi32(_mm256_mullo_epi32(lo32, lo32), 7);
+            _mm256_storeu_si256((__m256i*)(out_vals + i), sq_lo);
+            
+            // Upper 8 int16 -> int32
+            __m128i hi16 = _mm256_extracti128_si256(clamped, 1);
+            __m256i hi32 = _mm256_cvtepi16_epi32(hi16);
+            __m256i sq_hi = _mm256_srli_epi32(_mm256_mullo_epi32(hi32, hi32), 7);
+            _mm256_storeu_si256((__m256i*)(out_vals + i + 8), sq_hi);
+        }
+    };
+    process_half(us_acc.values, l0_out);
+    process_half(them_acc.values, l0_out + BIG_ACCUMULATOR_SIZE);
+#else
     for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
         l0_out[i] = screl(us_acc.values[i]);
         l0_out[BIG_ACCUMULATOR_SIZE + i] = screl(them_acc.values[i]);
     }
+#endif
 
     // 2. Linear Layer 1: 512 -> 32 (honest AVX2 dot)
     alignas(32) int32_t l1_out[BIG_L1_SIZE];

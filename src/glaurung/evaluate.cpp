@@ -293,7 +293,14 @@ namespace {
 /// between them based on the remaining material.
 
 Value evaluate(const Position &pos, EvalInfo &ei, int threadID) {
-  Color stm;
+  Color stm = pos.side_to_move();
+
+  if (pointchess::EvaluationManager::instance().get_config().use_nnue &&
+      pointchess::EvaluationManager::instance().active_backend() != pointchess::BACKEND_CPU_CLASSICAL &&
+      (pointchess::nnue::GlobalNNUE.is_loaded() || pointchess::nnue::GlobalMega1024.is_loaded())) {
+    return pointchess::nnue::evaluate_nnue(pos);
+  }
+
   ScaleFactor factor[2] = {SCALE_FACTOR_NORMAL, SCALE_FACTOR_NORMAL};
   Phase phase;
 
@@ -301,8 +308,6 @@ Value evaluate(const Position &pos, EvalInfo &ei, int threadID) {
 
   assert(pos.is_ok());
   assert(threadID >= 0 && threadID < THREAD_MAX);
-
-  stm = pos.side_to_move();
 
   // Initialize by reading the incrementally updated scores included in the
   // position object (material + piece square tables):

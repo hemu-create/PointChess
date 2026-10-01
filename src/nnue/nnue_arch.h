@@ -11,6 +11,9 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
 
 namespace pointchess {
 namespace nnue {
@@ -44,21 +47,45 @@ struct alignas(64) BigAccumulator {
     int16_t values[BIG_ACCUMULATOR_SIZE];
 
     void clear(const int16_t* biases) {
+#if defined(__AVX2__)
+        const __m256i* src = reinterpret_cast<const __m256i*>(biases);
+        __m256i* dst = reinterpret_cast<__m256i*>(values);
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE / 16; ++i) {
+            _mm256_store_si256(dst + i, _mm256_loadu_si256(src + i));
+        }
+#else
         std::memcpy(values, biases, sizeof(values));
+#endif
     }
 
     void add_feature(int feature_idx, const int16_t* weights) {
         const int16_t* w = weights + feature_idx * BIG_ACCUMULATOR_SIZE;
+#if defined(__AVX2__)
+        const __m256i* src = reinterpret_cast<const __m256i*>(w);
+        __m256i* dst = reinterpret_cast<__m256i*>(values);
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE / 16; ++i) {
+            _mm256_store_si256(dst + i, _mm256_add_epi16(_mm256_load_si256(dst + i), _mm256_loadu_si256(src + i)));
+        }
+#else
         for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
             values[i] += w[i];
         }
+#endif
     }
 
     void sub_feature(int feature_idx, const int16_t* weights) {
         const int16_t* w = weights + feature_idx * BIG_ACCUMULATOR_SIZE;
+#if defined(__AVX2__)
+        const __m256i* src = reinterpret_cast<const __m256i*>(w);
+        __m256i* dst = reinterpret_cast<__m256i*>(values);
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE / 16; ++i) {
+            _mm256_store_si256(dst + i, _mm256_sub_epi16(_mm256_load_si256(dst + i), _mm256_loadu_si256(src + i)));
+        }
+#else
         for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
             values[i] -= w[i];
         }
+#endif
     }
 };
 

@@ -1294,6 +1294,17 @@ namespace {
         }
       }
 
+      // Late Move Pruning (LMP, Stockfish-style):
+      // In non-PV nodes, if many quiet moves have already failed to produce
+      // a beta cutoff, prune the remaining quiet moves.
+      if (ext == Depth(0) && !moveIsCapture && !move_promotion(move)
+          && !moveIsCheck && !moveIsPassedPawnPush && depth <= 8*OnePly) {
+        int d_ply = int(depth / OnePly);
+        int lmpThreshold = 3 + d_ply * d_ply;
+        if (moveCount > lmpThreshold)
+          continue;
+      }
+
       // Futility pruning
       if(useFutilityPruning && ext == Depth(0) && !moveIsCapture &&
          !moveIsPassedPawnPush && !move_promotion(move)) {
