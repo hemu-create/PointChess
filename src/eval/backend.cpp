@@ -20,9 +20,25 @@ EvaluationManager::EvaluationManager() {
 }
 
 void EvaluationManager::check_gpu_availability() {
-    config.gpu_available = false;
+    config.gpu_available = true; // Enabled across Windows, macOS, and Linux
 
-    // 1. Universal Direct Rendering Infrastructure (AMD Radeon, Intel Arc / Xe, NVIDIA, etc.)
+#if defined(_WIN32)
+    // Windows: Direct3D 12, DirectX, Vulkan, OpenCL, CUDA
+    const char* win_env[] = {
+        "CUDA_PATH", "CUDA_VISIBLE_DEVICES", "HIP_PATH", "ONEAPI_ROOT", "VULKAN_SDK"
+    };
+    for (const char* var : win_env) {
+        if (getenv(var)) {
+            config.gpu_available = true;
+            return;
+        }
+    }
+#elif defined(__APPLE__)
+    // macOS / Apple Silicon: Metal Performance Shaders / GPU
+    config.gpu_available = true;
+    return;
+#else
+    // Linux / BSD / Unix: DRI, ROCm, NVIDIA, or environment variables
     FILE* f_dri = fopen("/dev/dri/renderD128", "r");
     if (!f_dri) f_dri = fopen("/dev/dri/card0", "r");
     if (f_dri) {
@@ -30,16 +46,12 @@ void EvaluationManager::check_gpu_availability() {
         fclose(f_dri);
         return;
     }
-
-    // 2. AMD ROCm / HSA Kernel Fusion Driver
     FILE* f_rocm = fopen("/dev/kfd", "r");
     if (f_rocm) {
         config.gpu_available = true;
         fclose(f_rocm);
         return;
     }
-
-    // 3. NVIDIA Device Nodes
     FILE* f_nv = fopen("/dev/nvidia0", "r");
     if (!f_nv) f_nv = fopen("/dev/nvidiactl", "r");
     if (f_nv) {
@@ -47,8 +59,9 @@ void EvaluationManager::check_gpu_availability() {
         fclose(f_nv);
         return;
     }
+#endif
 
-    // 4. Universal GPU Environment Variables (NVIDIA CUDA, AMD HIP/ROCm, Intel OneAPI, OpenCL)
+    // Universal cross-platform GPU environment flags
     const char* env_vars[] = {
         "CUDA_VISIBLE_DEVICES",
         "ROCR_VISIBLE_DEVICES",
@@ -64,17 +77,6 @@ void EvaluationManager::check_gpu_availability() {
             return;
         }
     }
-
-    // 5. Query system GPU toolchains
-    #if !defined(_WIN32)
-    if (system("which nvidia-smi >/dev/null 2>&1 || which rocm-smi >/dev/null 2>&1 || which clinfo >/dev/null 2>&1 || which vulkaninfo >/dev/null 2>&1") == 0) {
-        config.gpu_available = true;
-        return;
-    }
-    #endif
-
-    // Always permit user to activate GPU mode
-    config.gpu_available = true;
 }
 
 void EvaluationManager::init() {
@@ -87,9 +89,15 @@ void EvaluationManager::set_backend(const std::string& backend_name) {
     std::string b = backend_name;
     std::transform(b.begin(), b.end(), b.begin(), ::tolower);
 
-    if (b == "gpu" || b == "cuda" || b == "rocm" || b == "metal" || b == "vulkan" || b == "direct3d") {
+    if (b == "gpu" || b == "cuda" || b == "rocm" || b == "metal" || b == "vulkan" || b == "directx" || b == "d3d12") {
         config.backend = BACKEND_GPU_CUDA;
+#if defined(_WIN32)
+        std::cout << "info string PointChess backend set to GPU (Windows DirectX / Vulkan / CUDA Hardware Acceleration enabled)" << std::endl;
+#elif defined(__APPLE__)
+        std::cout << "info string PointChess backend set to GPU (macOS Apple Silicon Metal Acceleration enabled)" << std::endl;
+#else
         std::cout << "info string PointChess backend set to GPU (Universal Hardware / GPU Acceleration enabled)" << std::endl;
+#endif
     } else if (b == "opencl" || b == "gpu (opencl)") {
         config.backend = BACKEND_GPU_OPENCL;
         std::cout << "info string PointChess backend set to GPU (OpenCL Acceleration)" << std::endl;
