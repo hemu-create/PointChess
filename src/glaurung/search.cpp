@@ -423,24 +423,28 @@ void think(const Position &pos, bool infinite, bool ponder, int time,
   for(int i = 1; i < ActiveThreads; i++)
     assert(thread_is_available(i, 0));
 
-  // Set thinking time:
+  // Set thinking time with safety margin for ultra-bullet:
   if(time > 0) {
+    int safety_margin = (time < 500) ? 5 : ((time < 2000) ? 15 : 30);
+    int available_time = Max(1, time - safety_margin);
+
     if(!movesToGo) { // Sudden death time control
       if(increment > 0) {
-        MaxSearchTime = time / 25 + (increment * 3) / 4;
-        AbsoluteMaxSearchTime = Min(time - 10, time / 3 + increment);
+        MaxSearchTime = available_time / 30 + (increment / 2);
+        AbsoluteMaxSearchTime = Min(available_time, available_time / 4 + increment);
       }
       else { // Blitz game without increment
-        MaxSearchTime = time / 30;
-        AbsoluteMaxSearchTime = Min(time - 10, time / 6);
+        MaxSearchTime = available_time / 40;
+        AbsoluteMaxSearchTime = Min(available_time, available_time / 8);
       }
     }
     else { // (x moves) / (y minutes)
-      MaxSearchTime = time / Min(movesToGo, 25) + (increment * 3) / 4;
-      AbsoluteMaxSearchTime = Min(time - 10, (2 * time) / Min(movesToGo, 10));
+      MaxSearchTime = available_time / Min(movesToGo, 30) + (increment / 2);
+      AbsoluteMaxSearchTime = Min(available_time, (2 * available_time) / Min(movesToGo, 10));
     }
-    if(AbsoluteMaxSearchTime <= 0) AbsoluteMaxSearchTime = Max(1, time - 5);
+    if(AbsoluteMaxSearchTime <= 0) AbsoluteMaxSearchTime = 1;
     if(MaxSearchTime > AbsoluteMaxSearchTime) MaxSearchTime = AbsoluteMaxSearchTime;
+    if(MaxSearchTime <= 0) MaxSearchTime = 1;
   }
   else {
     MaxSearchTime = 1000000;
@@ -454,11 +458,11 @@ void think(const Position &pos, bool infinite, bool ponder, int time,
 
   MaxNodes = maxNodes;
   if(MaxNodes) {
-    NodesBetweenPolls = Min(MaxNodes, 1000);
+    NodesBetweenPolls = Min(MaxNodes, 256);
     InfiniteSearch = true; // HACK
   }
   else
-    NodesBetweenPolls = 1000;
+    NodesBetweenPolls = (time > 0 && time < 2000) ? 256 : 1000;
 
   // We're ready to start thinking.  Call the iterative deepening loop
   // function:
