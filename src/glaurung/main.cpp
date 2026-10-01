@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
   MaterialInfo::init();
   MovePicker::init_phase_table();
   init_search_tables();
-  init_eval(1);
+  init_eval(THREAD_MAX);
   pointchess::EvaluationManager::instance().init();
   init_bitbases();
   init_threads();
