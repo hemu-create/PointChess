@@ -47,10 +47,14 @@ public:
   int move_ordering_score(Piece p, Move m) const;
   bool ok_to_prune(Piece p, Move m, Depth d) const;
 
+  void update_countermove(Move prevMove, Move refutation);
+  Move get_countermove(Move prevMove) const;
+
 private:
   int history[16][64];  // [piece][square]
   int successCount[16][64];
   int failureCount[16][64];
+  Move countermoves[64][64];
 };
 
 

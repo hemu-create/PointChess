@@ -931,10 +931,13 @@ namespace {
       ttMove = ss[ply].pv[ply];
     }
 
+    Move prevMove = (ply > 0) ? ss[ply-1].currentMove : MOVE_NONE;
+    Move countermove = H.get_countermove(prevMove);
+
     // Initialize a MovePicker object for the current position, and prepare
     // to search all moves:
     MovePicker mp = MovePicker(pos, true, ttMove, ss[ply].mateKiller,
-                               ss[ply].killer1, ss[ply].killer2, depth);
+                               ss[ply].killer1, ss[ply].killer2, depth, countermove);
     Move move, movesSearched[256];
     int moveCount = 0;
     Value value, bestValue = -VALUE_INFINITE;
@@ -1059,6 +1062,8 @@ namespace {
                         movesSearched[i], depth);
 
           H.success(pos.piece_on(move_from(m)), m, depth);
+          if(ply > 0 && ss[ply-1].currentMove != MOVE_NONE)
+            H.update_countermove(ss[ply-1].currentMove, m);
           
           if(m != ss[ply].killer1) {
             ss[ply].killer2 = ss[ply].killer1;
@@ -1228,10 +1233,13 @@ namespace {
       }
     }
 
+    Move prevMove = (ply > 0) ? ss[ply-1].currentMove : MOVE_NONE;
+    Move countermove = H.get_countermove(prevMove);
+
     // Initialize a MovePicker object for the current position, and prepare
     // to search all moves:
     MovePicker mp = MovePicker(pos, false, ttMove, ss[ply].mateKiller,
-                               ss[ply].killer1, ss[ply].killer2, depth);
+                               ss[ply].killer1, ss[ply].killer2, depth, countermove);
     Move move, movesSearched[256];
     int moveCount = 0;
     Value value, bestValue = -VALUE_INFINITE, futilityValue = VALUE_NONE;
@@ -1399,6 +1407,8 @@ namespace {
               H.failure(pos.piece_on(move_from(movesSearched[i])),
                         movesSearched[i], depth);
           H.success(pos.piece_on(move_from(m)), m, depth);
+          if(ply > 0 && ss[ply-1].currentMove != MOVE_NONE)
+            H.update_countermove(ss[ply-1].currentMove, m);
           
           if(m != ss[ply].killer1) {
             ss[ply].killer2 = ss[ply].killer1;

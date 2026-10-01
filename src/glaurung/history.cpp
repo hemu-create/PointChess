@@ -44,6 +44,20 @@ void History::clear() {
   memset(history, 0, 2 * 8 * 64 * sizeof(int));
   memset(successCount, 0, 2 * 8 * 64 * sizeof(int));
   memset(failureCount, 0, 2 * 8 * 64 * sizeof(int));
+  memset(countermoves, 0, 64 * 64 * sizeof(Move));
+}
+
+void History::update_countermove(Move prevMove, Move refutation) {
+  if (prevMove != MOVE_NONE && move_is_ok(prevMove) && refutation != MOVE_NONE && move_is_ok(refutation)) {
+    countermoves[move_from(prevMove)][move_to(prevMove)] = refutation;
+  }
+}
+
+Move History::get_countermove(Move prevMove) const {
+  if (prevMove != MOVE_NONE && move_is_ok(prevMove)) {
+    return countermoves[move_from(prevMove)][move_to(prevMove)];
+  }
+  return MOVE_NONE;
 }
 
 

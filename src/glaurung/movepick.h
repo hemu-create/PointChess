@@ -45,7 +45,7 @@ class MovePicker {
 
 public:
   MovePicker(Position &p, bool pvnode, Move ttm, Move mk, Move k1, Move k2,
-             Depth dpth);
+             Depth dpth, Move cm = MOVE_NONE);
   Move get_next_move();
   Move get_next_move(Lock &lock);
   int number_of_moves() const;
@@ -62,7 +62,7 @@ private:
   Move pick_move_from_list();
   
   Position *pos;
-  Move ttMove, mateKiller, killer1, killer2;
+  Move ttMove, mateKiller, killer1, killer2, countermove;
   Bitboard pinned, dc;
   MoveStack moves[256], badCaptures[64];
   bool pvNode;
