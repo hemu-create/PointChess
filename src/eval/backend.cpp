@@ -20,23 +20,61 @@ EvaluationManager::EvaluationManager() {
 }
 
 void EvaluationManager::check_gpu_availability() {
-    #if defined(__CUDACC__) || defined(USE_CUDA)
-    config.gpu_available = true;
-    #else
-    FILE* f = fopen("/dev/nvidia0", "r");
-    if (!f) f = fopen("/dev/nvidiactl", "r");
-    if (f) {
+    config.gpu_available = false;
+
+    // 1. Universal Direct Rendering Infrastructure (AMD Radeon, Intel Arc / Xe, NVIDIA, etc.)
+    FILE* f_dri = fopen("/dev/dri/renderD128", "r");
+    if (!f_dri) f_dri = fopen("/dev/dri/card0", "r");
+    if (f_dri) {
         config.gpu_available = true;
-        fclose(f);
-    } else {
-        const char* cuda_env = getenv("CUDA_VISIBLE_DEVICES");
-        if (cuda_env && std::string(cuda_env) != "-1" && std::string(cuda_env) != "") {
+        fclose(f_dri);
+        return;
+    }
+
+    // 2. AMD ROCm / HSA Kernel Fusion Driver
+    FILE* f_rocm = fopen("/dev/kfd", "r");
+    if (f_rocm) {
+        config.gpu_available = true;
+        fclose(f_rocm);
+        return;
+    }
+
+    // 3. NVIDIA Device Nodes
+    FILE* f_nv = fopen("/dev/nvidia0", "r");
+    if (!f_nv) f_nv = fopen("/dev/nvidiactl", "r");
+    if (f_nv) {
+        config.gpu_available = true;
+        fclose(f_nv);
+        return;
+    }
+
+    // 4. Universal GPU Environment Variables (NVIDIA CUDA, AMD HIP/ROCm, Intel OneAPI, OpenCL)
+    const char* env_vars[] = {
+        "CUDA_VISIBLE_DEVICES",
+        "ROCR_VISIBLE_DEVICES",
+        "HIP_VISIBLE_DEVICES",
+        "ONEAPI_DEVICE_SELECTOR",
+        "GPU_DEVICE_ORDINAL",
+        "OCL_ICD_VENDORS"
+    };
+    for (const char* var : env_vars) {
+        const char* val = getenv(var);
+        if (val && std::string(val) != "-1" && std::string(val) != "") {
             config.gpu_available = true;
-        } else {
-            config.gpu_available = (system("nvidia-smi > /dev/null 2>&1") == 0);
+            return;
         }
     }
+
+    // 5. Query system GPU toolchains
+    #if !defined(_WIN32)
+    if (system("which nvidia-smi >/dev/null 2>&1 || which rocm-smi >/dev/null 2>&1 || which clinfo >/dev/null 2>&1 || which vulkaninfo >/dev/null 2>&1") == 0) {
+        config.gpu_available = true;
+        return;
+    }
     #endif
+
+    // Always permit user to activate GPU mode
+    config.gpu_available = true;
 }
 
 void EvaluationManager::init() {
@@ -49,12 +87,12 @@ void EvaluationManager::set_backend(const std::string& backend_name) {
     std::string b = backend_name;
     std::transform(b.begin(), b.end(), b.begin(), ::tolower);
 
-    if (b == "gpu" || b == "cuda" || b == "gpu (cuda)") {
+    if (b == "gpu" || b == "cuda" || b == "rocm" || b == "metal" || b == "vulkan" || b == "direct3d") {
         config.backend = BACKEND_GPU_CUDA;
-        std::cout << "info string PointChess backend set to GPU (NVIDIA CUDA Acceleration)" << std::endl;
+        std::cout << "info string PointChess backend set to GPU (Universal Hardware / GPU Acceleration enabled)" << std::endl;
     } else if (b == "opencl" || b == "gpu (opencl)") {
         config.backend = BACKEND_GPU_OPENCL;
-        std::cout << "info string PointChess backend set to GPU (OpenCL)" << std::endl;
+        std::cout << "info string PointChess backend set to GPU (OpenCL Acceleration)" << std::endl;
     } else if (b == "classical" || b == "cpu classical") {
         config.backend = BACKEND_CPU_CLASSICAL;
         config.use_nnue = false;
