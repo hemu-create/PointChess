@@ -20,5 +20,4 @@ echo "============================================================"
   -each tc=$TC proto=uci \
   -rounds $ROUNDS -games 2 -repeat -concurrency $THREADS \
   -pgnout file=match_60k.pgn \
-  -log file=match_60k.log \
-  -sprt elo0=0.0 elo1=5.0 alpha=0.05 beta=0.05
+  -log file=match_60k.log
