@@ -16,6 +16,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from model import PointChessNNUE
+from model_mega import MegaNNUE
 from streaming_dataset import StreamingChessDataset
 from dataset import collate_halfkp
 
@@ -60,8 +61,13 @@ def train_4b(args):
         print(f" Mixed Precision: AMP fp16 | Activation: SCReL")
         print("=" * 65)
 
-    # 1. Model
-    model = PointChessNNUE(activation="screl").to(device)
+    # 1. Model (256 = classic, 1024 = mega; selected via --ft_size)
+    if args.ft_size == 256:
+        model = PointChessNNUE(activation="screl").to(device)
+    else:
+        model = MegaNNUE(ft_size=args.ft_size).to(device)
+    if is_main:
+        print(f" FT width: {args.ft_size} | Params: {sum(p.numel() for p in model.parameters()):,}")
     if is_distributed:
         model = DDP(model, device_ids=[local_rank] if torch.cuda.is_available() else None)
     raw_model = model.module if is_distributed else model
@@ -103,7 +109,7 @@ def train_4b(args):
             b_f = batch['b_features'].to(device, non_blocking=True)
             b_off = batch['b_offsets'].to(device, non_blocking=True)
             stm = batch['stm'].to(device, non_blocking=True)
-            target_eval = batch['score'].to(device, non_blocking=True)
+            target_eval = torch.clamp(batch['score'].to(device, non_blocking=True), -2000.0, 2000.0)
             target_wdl = batch['result'].to(device, non_blocking=True)
             weights = batch.get('weight', torch.ones_like(target_eval)).to(device, non_blocking=True)
 
@@ -164,6 +170,7 @@ if __name__ == "__main__":
     parser.add_argument("--log_interval", type=int, default=100, help="Batches between logs")
     parser.add_argument("--save_interval", type=int, default=2000, help="Batches between checkpoints")
     parser.add_argument("--output_dir", type=str, default="checkpoints_4b", help="Output directory for checkpoints")
+    parser.add_argument("--ft_size", type=int, default=256, help="Feature-transformer width (256 or 1024)")
 
     args = parser.parse_args()
     train_4b(args)

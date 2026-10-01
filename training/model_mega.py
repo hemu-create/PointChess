@@ -43,6 +43,11 @@ class MegaNNUE(nn.Module):
         l0 = torch.cat([us, them], dim=-1)
         return self.out(self.act(self.l2(self.act(self.l1(l0))))).squeeze(-1)
 
+    def compute_loss(self, pred_score, target_eval, target_wdl, lambda_val=0.8):
+        wdl_loss = F.binary_cross_entropy_with_logits(pred_score / 400.0, target_wdl)
+        eval_loss = F.mse_loss(pred_score, target_eval)
+        return lambda_val * eval_loss + (1.0 - lambda_val) * (wdl_loss * 400.0)
+
     def param_count(self):
         return sum(p.numel() for p in self.parameters())
 
