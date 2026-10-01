@@ -1,0 +1,9 @@
+{
+  "title": "pointchess-200k-dataset",
+  "id": "hemeshchesskas/pointchess-200k-dataset",
+  "licenses": [
+    {
+      "name": "CC0-1.0"
+    }
+  ]
+}
