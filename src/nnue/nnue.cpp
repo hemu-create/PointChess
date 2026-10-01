@@ -7,11 +7,16 @@
 #include <iostream>
 #include <sstream>
 #include <random>
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
 
 namespace pointchess {
 namespace nnue {
 
 NNUEEvaluation GlobalNNUE;
+MegaNNUE1024 GlobalMega1024;
+int ActiveFTSize = 256;
 
 BigNetworkParameters::BigNetworkParameters() {
     init_default_weights();
@@ -88,6 +93,35 @@ inline int32_t screl_i32(int32_t x) {
     return (clamped * clamped) / 128;
 }
 
+// Honest AVX2 dot: int32[] . int8[] -> int64 sum. Scalar tail for remainder.
+inline int64_t dot_i32_i8_avx2(const int32_t* a, const int8_t* b, int n) {
+#if defined(__AVX2__)
+    __m256i acc0 = _mm256_setzero_si256(), acc1 = _mm256_setzero_si256();
+    int i = 0;
+    for (; i + 16 <= n; i += 16) {
+        __m128i b16 = _mm_loadu_si128((const __m128i*)(b + i));
+        __m256i b0 = _mm256_cvtepi8_epi32(b16);
+        __m256i b1 = _mm256_cvtepi8_epi32(_mm_srli_si128(b16, 8));
+        __m256i a0 = _mm256_loadu_si256((const __m256i*)(a + i));
+        __m256i a1 = _mm256_loadu_si256((const __m256i*)(a + i + 8));
+        acc0 = _mm256_add_epi32(acc0, _mm256_mullo_epi32(a0, b0));
+        acc1 = _mm256_add_epi32(acc1, _mm256_mullo_epi32(a1, b1));
+    }
+    acc0 = _mm256_add_epi32(acc0, acc1);
+    __m128i lo = _mm256_castsi256_si128(acc0), hi = _mm256_extracti128_si256(acc0, 1);
+    __m128i s = _mm_add_epi32(lo, hi);
+    s = _mm_add_epi32(s, _mm_shuffle_epi32(s, _MM_SHUFFLE(2, 3, 0, 1)));
+    s = _mm_add_epi32(s, _mm_shuffle_epi32(s, _MM_SHUFFLE(1, 0, 3, 2)));
+    int64_t sum = _mm_cvtsi128_si32(s);
+    for (; i < n; ++i) sum += (int64_t)a[i] * b[i];
+    return sum;
+#else
+    int64_t sum = 0;
+    for (int i = 0; i < n; ++i) sum += (int64_t)a[i] * b[i];
+    return sum;
+#endif
+}
+
 int NNUEEvaluation::evaluate_accumulators(const BigAccumulator& us_acc, const BigAccumulator& them_acc) {
     // 1. SCReL Activation on 11.5M Accumulator outputs: 512 inputs (256 us + 256 them)
     alignas(64) int32_t l0_out[BIG_ACCUMULATOR_SIZE * 2];
@@ -96,36 +130,29 @@ int NNUEEvaluation::evaluate_accumulators(const BigAccumulator& us_acc, const Bi
         l0_out[BIG_ACCUMULATOR_SIZE + i] = screl(them_acc.values[i]);
     }
 
-    // 2. Linear Layer 1: 512 -> 32
+    // 2. Linear Layer 1: 512 -> 32 (honest AVX2 dot)
     alignas(32) int32_t l1_out[BIG_L1_SIZE];
     for (int o = 0; o < BIG_L1_SIZE; ++o) {
-        int32_t sum = net.l1_biases[o] * WEIGHT_SCALE_L0;
-        const int8_t* w = net.l1_weights + o * (BIG_ACCUMULATOR_SIZE * 2);
-        for (int i = 0; i < BIG_ACCUMULATOR_SIZE * 2; ++i) {
-            sum += l0_out[i] * w[i];
-        }
+        int64_t dot = dot_i32_i8_avx2(l0_out, net.l1_weights + o * (BIG_ACCUMULATOR_SIZE * 2),
+                                      BIG_ACCUMULATOR_SIZE * 2);
+        int32_t sum = int32_t(net.l1_biases[o] * WEIGHT_SCALE_L0 + dot);
         l1_out[o] = screl_i32(sum / (WEIGHT_SCALE_L0 * 8));
     }
 
-    // 3. Linear Layer 2: 32 -> 32
+    // 3. Linear Layer 2: 32 -> 32 (AVX2 dot)
     alignas(32) int32_t l2_out[BIG_L2_SIZE];
     for (int o = 0; o < BIG_L2_SIZE; ++o) {
-        int32_t sum = net.l2_biases[o] * WEIGHT_SCALE_L1;
-        const int8_t* w = net.l2_weights + o * BIG_L1_SIZE;
-        for (int i = 0; i < BIG_L1_SIZE; ++i) {
-            sum += l1_out[i] * w[i];
-        }
+        int64_t dot = dot_i32_i8_avx2(l1_out, net.l2_weights + o * BIG_L1_SIZE, BIG_L1_SIZE);
+        int32_t sum = int32_t(net.l2_biases[o] * WEIGHT_SCALE_L1 + dot);
         l2_out[o] = screl_i32(sum / (WEIGHT_SCALE_L1 * 4));
     }
 
-    // 4. Output Layer: 32 -> 1
-    int32_t sum = net.out_bias * WEIGHT_SCALE_L2;
-    for (int i = 0; i < BIG_L2_SIZE; ++i) {
-        sum += l2_out[i] * net.out_weights[i];
-    }
+    // 4. Output Layer: 32 -> 1 (AVX2 dot)
+    int64_t out_dot = dot_i32_i8_avx2(l2_out, net.out_weights, BIG_L2_SIZE);
+    int32_t sum = int32_t(net.out_bias * WEIGHT_SCALE_L2 + out_dot);
 
     int score = sum / 256;
-    return std::clamp(score, -500, 500);
+    return std::clamp(score, -1500, 1500);
 }
 
 int NNUEEvaluation::evaluate(int white_king_sq, int black_king_sq,
@@ -155,13 +182,88 @@ int NNUEEvaluation::evaluate(int white_king_sq, int black_king_sq,
     }
 }
 
+bool MegaNNUE1024::load(std::ifstream& file) {
+    net.feature_weights.resize(size_t(HALF_KA_FEATURES) * MEGA1024_FT);
+    net.feature_biases.resize(MEGA1024_FT);
+    net.l1_weights.resize(size_t(MEGA1024_FT) * 2 * BIG_L1_SIZE);
+    net.l1_biases.resize(BIG_L1_SIZE);
+    net.l2_weights.resize(size_t(BIG_L1_SIZE) * BIG_L2_SIZE);
+    net.l2_biases.resize(BIG_L2_SIZE);
+    net.out_weights.resize(BIG_L2_SIZE);
+    file.read(reinterpret_cast<char*>(net.feature_weights.data()),
+              net.feature_weights.size() * sizeof(int16_t));
+    file.read(reinterpret_cast<char*>(net.feature_biases.data()),
+              net.feature_biases.size() * sizeof(int16_t));
+    file.read(reinterpret_cast<char*>(net.l1_weights.data()), net.l1_weights.size());
+    file.read(reinterpret_cast<char*>(net.l1_biases.data()),
+              net.l1_biases.size() * sizeof(int32_t));
+    file.read(reinterpret_cast<char*>(net.l2_weights.data()), net.l2_weights.size());
+    file.read(reinterpret_cast<char*>(net.l2_biases.data()),
+              net.l2_biases.size() * sizeof(int32_t));
+    file.read(reinterpret_cast<char*>(net.out_weights.data()), net.out_weights.size());
+    file.read(reinterpret_cast<char*>(&net.out_bias), sizeof(net.out_bias));
+    if (!file.good() && !file.eof()) return false;
+    loaded = true;
+    return true;
+}
+
+int MegaNNUE1024::evaluate(const int* wf, int nw, const int* bf, int nb, int stm) {
+    constexpr int FT = MEGA1024_FT;
+    std::vector<int16_t> us(FT), them(FT);
+    std::memcpy(us.data(), net.feature_biases.data(), FT * sizeof(int16_t));
+    them = us;
+    auto gather = [&](const int* feats, int n, std::vector<int16_t>& acc) {
+        for (int i = 0; i < n; ++i) {
+            const int16_t* w = net.feature_weights.data() + size_t(feats[i]) * FT;
+            for (int j = 0; j < FT; ++j) acc[j] += w[j];
+        }
+    };
+    if (stm == 0) { gather(wf, nw, us); gather(bf, nb, them); }
+    else { gather(bf, nb, us); gather(wf, nw, them); }
+    alignas(64) static thread_local int32_t l0[2048];
+    for (int i = 0; i < FT; ++i) {
+        int32_t a = us[i] < 0 ? 0 : (us[i] > 127 ? 127 : us[i]);
+        int32_t b = them[i] < 0 ? 0 : (them[i] > 127 ? 127 : them[i]);
+        l0[i] = (a * a) / 128;
+        l0[FT + i] = (b * b) / 128;
+    }
+    alignas(32) int32_t l1[BIG_L1_SIZE], l2[BIG_L2_SIZE];
+    for (int o = 0; o < BIG_L1_SIZE; ++o) {
+        int64_t dot = dot_i32_i8_avx2(l0, net.l1_weights.data() + size_t(o) * FT * 2, FT * 2);
+        l1[o] = screl_i32(int32_t(net.l1_biases[o] * WEIGHT_SCALE_L0 + dot) / (WEIGHT_SCALE_L0 * 8));
+    }
+    for (int o = 0; o < BIG_L2_SIZE; ++o) {
+        int64_t dot = dot_i32_i8_avx2(l1, net.l2_weights.data() + size_t(o) * BIG_L1_SIZE, BIG_L1_SIZE);
+        l2[o] = screl_i32(int32_t(net.l2_biases[o] * WEIGHT_SCALE_L1 + dot) / (WEIGHT_SCALE_L1 * 4));
+    }
+    int64_t out_dot = dot_i32_i8_avx2(l2, net.out_weights.data(), BIG_L2_SIZE);
+    int32_t sum = int32_t(net.out_bias * WEIGHT_SCALE_L2 + out_dot);
+    return std::clamp(sum / 256, -1500, 1500);
+}
+
 bool NNUEEvaluation::load_pchess_file(const std::string& filepath) {
     std::ifstream file(filepath, std::ios::binary);
     if (!file.is_open()) return false;
 
     char magic[32] = {0};
     file.read(magic, 24);
-    if (std::string(magic).find("POINTCHESS") == std::string::npos) {
+    std::string ms(magic, 24);
+    if (ms.find("POINTCHESS_V3") != std::string::npos) {
+        int32_t ft = 0;
+        file.read(reinterpret_cast<char*>(&ft), sizeof(ft));
+        if (ft == MEGA1024_FT) {
+            if (GlobalMega1024.load(file)) {
+                ActiveFTSize = 1024;
+                network_loaded = true;
+                current_file = filepath;
+                return true;
+            }
+            return false;
+        }
+        return false; // unsupported v3 width
+    }
+    ActiveFTSize = 256;
+    if (ms.find("POINTCHESS") == std::string::npos) {
         file.seekg(0);
     }
 

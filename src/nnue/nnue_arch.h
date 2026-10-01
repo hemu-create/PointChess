@@ -116,7 +116,32 @@ private:
     std::string current_file;
 };
 
+// Mega 1024-wide network (92M params, 88MB int16). Heap-allocated on load.
+constexpr int MEGA1024_FT = 1024;
+struct Mega1024Params {
+    std::vector<int16_t> feature_weights; // 45056*1024
+    std::vector<int16_t> feature_biases;  // 1024
+    std::vector<int8_t> l1_weights;       // 2048*32
+    std::vector<int32_t> l1_biases;       // 32
+    std::vector<int8_t> l2_weights;       // 32*32
+    std::vector<int32_t> l2_biases;       // 32
+    std::vector<int8_t> out_weights;      // 32
+    int32_t out_bias = 0;
+};
+
+class MegaNNUE1024 {
+public:
+    bool load(std::ifstream& file); // file positioned after v3 header+ft_size
+    bool is_loaded() const { return loaded; }
+    int evaluate(const int* wf, int nw, const int* bf, int nb, int stm);
+private:
+    Mega1024Params net;
+    bool loaded = false;
+};
+
 extern NNUEEvaluation GlobalNNUE;
+extern MegaNNUE1024 GlobalMega1024;
+extern int ActiveFTSize; // 256 or 1024, set by loader
 
 } // namespace nnue
 } // namespace pointchess

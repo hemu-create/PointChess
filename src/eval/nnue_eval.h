@@ -26,8 +26,32 @@ inline int piece_to_halfka_type(Piece p, Color perspective) {
     }
 }
 
+// Small direct-mapped eval cache: quiescence hits same positions repeatedly.
+// 16384 entries x 16B = 256KB, L2-resident. Key collision => recompute-safe (verified on hit).
+struct NNUEEvalCache {
+    static const int SIZE = 16384;
+    struct Entry { uint64_t key = 0; int32_t value = 0; };
+    Entry table[SIZE];
+    int hits = 0, lookups = 0;
+    Value lookup(uint64_t key, bool& found) {
+        lookups++;
+        Entry& e = table[key & (SIZE - 1)];
+        if (e.key == key) { hits++; found = true; return Value(e.value); }
+        found = false; return Value(0);
+    }
+    void store(uint64_t key, Value v) {
+        Entry& e = table[key & (SIZE - 1)];
+        e.key = key; e.value = int(v);
+    }
+};
+inline NNUEEvalCache& nnue_cache() { static NNUEEvalCache c; return c; }
+
 // Evaluate a position using Modern HalfKAv2 NNUE
 inline Value evaluate_nnue(const Position& pos) {
+    uint64_t key = uint64_t(pos.get_key()) ^ (pos.side_to_move() == WHITE ? 0x9e3779b97f4a7c15ULL : 0);
+    bool found = false;
+    Value cached = nnue_cache().lookup(key, found);
+    if (found) return cached;
     Square w_ksq = pos.king_square(WHITE);
     Square b_ksq = pos.king_square(BLACK);
 
@@ -61,12 +85,19 @@ inline Value evaluate_nnue(const Position& pos) {
     }
 
     int stm = (pos.side_to_move() == WHITE) ? 0 : 1;
-    int cp_score = GlobalNNUE.evaluate(w_k, b_k,
+    int cp_score;
+    if (ActiveFTSize == 1024 && GlobalMega1024.is_loaded()) {
+        cp_score = GlobalMega1024.evaluate(w_features, num_w, b_features, num_b, stm);
+    } else {
+        cp_score = GlobalNNUE.evaluate(w_k, b_k,
                                        w_features, num_w,
                                        b_features, num_b,
                                        stm);
+    }
 
-    return value_from_centipawns(cp_score);
+    Value v = value_from_centipawns(cp_score);
+    nnue_cache().store(key, v);
+    return v;
 }
 
 } // namespace nnue

@@ -468,9 +468,10 @@ Value evaluate(const Position &pos, EvalInfo &ei, int threadID) {
                     (Sign[stm] * value);
 
   if (pointchess::EvaluationManager::instance().get_config().use_nnue &&
-      pointchess::EvaluationManager::instance().active_backend() != pointchess::BACKEND_CPU_CLASSICAL) {
+      pointchess::EvaluationManager::instance().active_backend() != pointchess::BACKEND_CPU_CLASSICAL &&
+      (pointchess::nnue::GlobalNNUE.is_loaded() || pointchess::nnue::GlobalMega1024.is_loaded())) {
     Value nnue_val = pointchess::nnue::evaluate_nnue(pos);
-    return Value(int(base_eval) + int(nnue_val));
+    return Value(int(nnue_val) + int(base_eval) / 8);
   }
 
   return base_eval;
