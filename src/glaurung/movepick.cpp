@@ -236,28 +236,19 @@ int MovePicker::number_of_moves() const {
 /// MovePicker::pick_move_from_list().
 
 void MovePicker::score_captures() {
-  // Winning and equal captures in the main search are ordered by MVV/LVA.
-  // Suprisingly, this appears to perform slightly better than SEE based
-  // move ordering.  The reason is probably that in a position with a winning
-  // capture, capturing a more valuable (but sufficiently defended) piece
-  // first usually doesn't hurt.  The opponent will have to recapture, and
-  // the hanging piece will still be hanging (except in the unusual cases
-  // where it is possible to recapture with the hanging piece).  Exchanging
-  // big pieces before capturing a hanging piece probably helps to reduce
-  // the subtree size.
+  // Winning and equal captures in the main search are ordered by strict MVV/LVA
   for(int i = 0; i < numOfMoves; i++) {
     int seeValue = pos->see(moves[i].move);
     if(seeValue >= 0) {
       if(move_promotion(moves[i].move))
-        moves[i].score = QueenValueMidgame;
+        moves[i].score = int(QueenValueMidgame) * 20;
       else 
         moves[i].score =
-          int(pos->midgame_value_of_piece_on(move_to(moves[i].move))) -
-          int(pos->type_of_piece_on(move_from(moves[i].move)));
+          int(pos->midgame_value_of_piece_on(move_to(moves[i].move))) * 16 -
+          int(pos->midgame_value_of_piece_on(move_from(moves[i].move))) + 10000;
     }
     else
       moves[i].score = seeValue;
-        
   }
 }
 
@@ -292,11 +283,11 @@ void MovePicker::score_qcaptures() {
   for(int i = 0; i < numOfMoves; i++) {
     Move m = moves[i].move;
     if(move_promotion(m))
-      moves[i].score = QueenValueMidgame;
+      moves[i].score = int(QueenValueMidgame) * 20;
     else
       moves[i].score =
-        int(pos->midgame_value_of_piece_on(move_to(m))) -
-        int(pos->midgame_value_of_piece_on(move_to(m))) / 64;
+        int(pos->midgame_value_of_piece_on(move_to(m))) * 16 -
+        int(pos->midgame_value_of_piece_on(move_from(m)));
   }
 }
 
