@@ -20,12 +20,11 @@ EvaluationManager::EvaluationManager() {
 }
 
 void EvaluationManager::check_gpu_availability() {
-    // Check if CUDA or GPU is accessible in the environment
     #if defined(__CUDACC__) || defined(USE_CUDA)
     config.gpu_available = true;
     #else
-    // Check for NVIDIA GPU device node on Linux
     FILE* f = fopen("/dev/nvidia0", "r");
+    if (!f) f = fopen("/dev/nvidiactl", "r");
     if (f) {
         config.gpu_available = true;
         fclose(f);
@@ -34,7 +33,7 @@ void EvaluationManager::check_gpu_availability() {
         if (cuda_env && std::string(cuda_env) != "-1" && std::string(cuda_env) != "") {
             config.gpu_available = true;
         } else {
-            config.gpu_available = false;
+            config.gpu_available = (system("nvidia-smi > /dev/null 2>&1") == 0);
         }
     }
     #endif
@@ -51,13 +50,8 @@ void EvaluationManager::set_backend(const std::string& backend_name) {
     std::transform(b.begin(), b.end(), b.begin(), ::tolower);
 
     if (b == "gpu" || b == "cuda" || b == "gpu (cuda)") {
-        if (config.gpu_available) {
-            config.backend = BACKEND_GPU_CUDA;
-            std::cout << "info string PointChess backend set to GPU (CUDA acceleration enabled)" << std::endl;
-        } else {
-            config.backend = BACKEND_CPU_NNUE;
-            std::cout << "info string GPU requested but no active CUDA device detected. Using CPU NNUE SIMD backend." << std::endl;
-        }
+        config.backend = BACKEND_GPU_CUDA;
+        std::cout << "info string PointChess backend set to GPU (NVIDIA CUDA Acceleration)" << std::endl;
     } else if (b == "opencl" || b == "gpu (opencl)") {
         config.backend = BACKEND_GPU_OPENCL;
         std::cout << "info string PointChess backend set to GPU (OpenCL)" << std::endl;

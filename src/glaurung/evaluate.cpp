@@ -297,8 +297,22 @@ Value evaluate(const Position &pos, EvalInfo &ei, int threadID) {
 
   if (pointchess::EvaluationManager::instance().get_config().use_nnue &&
       pointchess::EvaluationManager::instance().active_backend() != pointchess::BACKEND_CPU_CLASSICAL &&
-      (pointchess::nnue::GlobalNNUE.is_loaded() || pointchess::nnue::GlobalMega1024.is_loaded())) {
-    return pointchess::nnue::evaluate_nnue(pos);
+      (pointchess::nnue::GlobalNNUE.is_loaded() || pointchess::nnue::GlobalMega1024.is_loaded() || pointchess::pointbeta::GlobalPointBeta.is_loaded())) {
+    Value raw_val = pointchess::nnue::evaluate_nnue(pos);
+
+    auto& mgr = pointchess::EvaluationManager::instance();
+    if (mgr.active_personality() != pointchess::PERSONALITY_DEFAULT) {
+      int aggr = mgr.get_aggressiveness_mult();
+      int cow = mgr.get_cowardice_mult();
+      int v = int(raw_val);
+      if (v > 0) {
+        v = (v * aggr) / 100;
+      } else if (v < 0) {
+        v = (v * (200 - cow)) / 100;
+      }
+      return Value(v);
+    }
+    return raw_val;
   }
 
   ScaleFactor factor[2] = {SCALE_FACTOR_NORMAL, SCALE_FACTOR_NORMAL};
