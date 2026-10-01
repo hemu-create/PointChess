@@ -147,6 +147,28 @@ Move MovePicker::get_next_move() {
       }
       break;
 
+    case PH_KILLER_1:
+      if(killer1 != MOVE_NONE && killer1 != ttMove && killer1 != mateKiller) {
+        assert(move_is_ok(killer1));
+        Move m = generate_move_if_legal(*pos, killer1, pinned);
+        if(m != MOVE_NONE) {
+          assert(m == killer1);
+          return m;
+        }
+      }
+      break;
+
+    case PH_KILLER_2:
+      if(killer2 != MOVE_NONE && killer2 != ttMove && killer2 != mateKiller && killer2 != killer1) {
+        assert(move_is_ok(killer2));
+        Move m = generate_move_if_legal(*pos, killer2, pinned);
+        if(m != MOVE_NONE) {
+          assert(m == killer2);
+          return m;
+        }
+      }
+      break;
+
     case PH_GOOD_CAPTURES:
       // pinned = pos->pinned_pieces(pos->side_to_move());
       numOfMoves = generate_captures(*pos, moves);
@@ -364,7 +386,7 @@ Move MovePicker::pick_move_from_list() {
         moves[movesPicked] = moves[bestIndex];
         moves[bestIndex] = tmp;
         move = moves[movesPicked++].move;
-        if(move != ttMove && move != mateKiller &&
+        if(move != ttMove && move != mateKiller && move != killer1 && move != killer2 &&
            pos->move_is_legal(move, pinned))
           return move;
       }
@@ -470,9 +492,8 @@ void MovePicker::init_phase_table() {
   PhaseTable[i++] = PH_TT_MOVE;
   PhaseTable[i++] = PH_MATE_KILLER;
   PhaseTable[i++] = PH_GOOD_CAPTURES;
-  // PH_KILLER_1 and PH_KILLER_2 are not yet used.
-  // PhaseTable[i++] = PH_KILLER_1;
-  // PhaseTable[i++] = PH_KILLER_2;
+  PhaseTable[i++] = PH_KILLER_1;
+  PhaseTable[i++] = PH_KILLER_2;
   PhaseTable[i++] = PH_NONCAPTURES;
   PhaseTable[i++] = PH_BAD_CAPTURES;
   PhaseTable[i++] = PH_STOP;
