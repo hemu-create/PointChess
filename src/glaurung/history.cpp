@@ -52,14 +52,27 @@ void History::clear() {
 /// The three parameters are the moving piece, the move itself, and the
 /// search depth.
 
+// Gravity update borrowed from Stockfish history.h StatsEntry::operator<<
+// (GPL-3.0, cf. tools/sf_ref/history.h): self-attenuating, bounded in
+// [-D, D], no global rescale pass needed.
+static const int HistoryGravityD = 16384;
+
+static void gravity_update(int &entry, int bonus) {
+  if(bonus > HistoryGravityD) bonus = HistoryGravityD;
+  if(bonus < -HistoryGravityD) bonus = -HistoryGravityD;
+  int absBonus = bonus >= 0 ? bonus : -bonus;
+  entry += bonus - entry * absBonus / HistoryGravityD;
+}
+
 void History::success(Piece p, Move m, Depth d) {
   assert(piece_is_ok(p));
   assert(move_is_ok(m));
 
-  history[p][move_to(m)] += int(d) * int(d);
+  int plies = int(d) / int(OnePly);
+  gravity_update(history[p][move_to(m)], 8 * plies * plies);
   successCount[p][move_to(m)]++;
 
-  // Prevent history overflow:
+  // Legacy overflow guard (gravity bounds entries, this is belt & braces):
   if(history[p][move_to(m)] >= HistoryMax)
     for(int i = 0; i < 16; i++)
       for(int j = 0; j < 64; j++)
@@ -71,10 +84,12 @@ void History::success(Piece p, Move m, Depth d) {
 /// called for each non-capturing move which failed to produce a beta cutoff
 /// at a node where a beta cutoff was finally found.
 
-void History::failure(Piece p, Move m) {
+void History::failure(Piece p, Move m, Depth d) {
   assert(piece_is_ok(p));
   assert(move_is_ok(m));
 
+  int plies = int(d) / int(OnePly);
+  gravity_update(history[p][move_to(m)], -8 * plies * plies);
   failureCount[p][move_to(m)]++;
 }
 

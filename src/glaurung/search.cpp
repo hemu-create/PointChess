@@ -1056,7 +1056,7 @@ namespace {
                && !move_promotion(movesSearched[i])
                && !move_is_ep(movesSearched[i]))
               H.failure(pos.piece_on(move_from(movesSearched[i])),
-                        movesSearched[i]);
+                        movesSearched[i], depth);
 
           H.success(pos.piece_on(move_from(m)), m, depth);
           
@@ -1386,7 +1386,7 @@ namespace {
                && !move_promotion(movesSearched[i])
                && !move_is_ep(movesSearched[i]))
               H.failure(pos.piece_on(move_from(movesSearched[i])),
-                        movesSearched[i]);
+                        movesSearched[i], depth);
           H.success(pos.piece_on(move_from(m)), m, depth);
           
           if(m != ss[ply].killer1) {

@@ -43,7 +43,7 @@ public:
   History();
   void clear();
   void success(Piece p, Move m, Depth d);
-  void failure(Piece p, Move m);
+  void failure(Piece p, Move m, Depth d);
   int move_ordering_score(Piece p, Move m) const;
   bool ok_to_prune(Piece p, Move m, Depth d) const;
 
