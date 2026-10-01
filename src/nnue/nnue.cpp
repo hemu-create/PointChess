@@ -1,6 +1,6 @@
 // PointChess - a chess engine in the Glaurung tradition.
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Modern HalfKAv2 NNUE Inference Engine with SCReL
+// 11.5-Million Parameter Modern HalfKAv2 NNUE Inference Engine
 
 #include "nnue_arch.h"
 #include <fstream>
@@ -13,20 +13,17 @@ namespace nnue {
 
 NNUEEvaluation GlobalNNUE;
 
-NetworkParameters::NetworkParameters() {
+BigNetworkParameters::BigNetworkParameters() {
     init_default_weights();
 }
 
-void NetworkParameters::init_default_weights() {
-    std::memset(this, 0, sizeof(NetworkParameters));
+void BigNetworkParameters::init_default_weights() {
+    std::memset(this, 0, sizeof(BigNetworkParameters));
 
-    for (int i = 0; i < ACCUMULATOR_SIZE; ++i) {
+    for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
         feature_biases[i] = 0;
     }
 
-    // Modern 11 piece types:
-    // 0: W_P, 1: W_N, 2: W_B, 3: W_R, 4: W_Q, 5: W_K
-    // 6: B_P, 7: B_N, 8: B_B, 9: B_R, 10: B_Q
     const int base_piece_vals[NUM_PIECE_TYPES] = {
         100, 320, 330, 500, 900, 0,
         -100, -320, -330, -500, -900
@@ -44,12 +41,12 @@ void NetworkParameters::init_default_weights() {
         for (int p = 0; p < NUM_PIECE_TYPES; ++p) {
             for (int s = 0; s < 64; ++s) {
                 int f_idx = k * HALF_KA_PIECE_FEATURES + p * 64 + s;
-                int16_t* w = feature_weights + f_idx * ACCUMULATOR_SIZE;
+                int16_t* w = feature_weights + f_idx * BIG_ACCUMULATOR_SIZE;
                 int piece_val = base_piece_vals[p];
                 int pst = center_dist(s) * (p < 6 ? 3 : -3);
                 int score = piece_val + pst;
 
-                for (int i = 0; i < ACCUMULATOR_SIZE; ++i) {
+                for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
                     float noise = dist(rng) * 2.0f;
                     w[i] = static_cast<int16_t>(score / 4 + static_cast<int>(noise));
                 }
@@ -57,21 +54,21 @@ void NetworkParameters::init_default_weights() {
         }
     }
 
-    for (int i = 0; i < ACCUMULATOR_SIZE * 2 * L1_SIZE; ++i) {
+    for (int i = 0; i < BIG_ACCUMULATOR_SIZE * 2 * BIG_L1_SIZE; ++i) {
         l1_weights[i] = static_cast<int8_t>((i % 7) - 3);
     }
-    for (int i = 0; i < L1_SIZE; ++i) {
+    for (int i = 0; i < BIG_L1_SIZE; ++i) {
         l1_biases[i] = 10;
     }
 
-    for (int i = 0; i < L1_SIZE * L2_SIZE; ++i) {
+    for (int i = 0; i < BIG_L1_SIZE * BIG_L2_SIZE; ++i) {
         l2_weights[i] = static_cast<int8_t>((i % 5) - 2);
     }
-    for (int i = 0; i < L2_SIZE; ++i) {
+    for (int i = 0; i < BIG_L2_SIZE; ++i) {
         l2_biases[i] = 5;
     }
 
-    for (int i = 0; i < L2_SIZE; ++i) {
+    for (int i = 0; i < BIG_L2_SIZE; ++i) {
         out_weights[i] = static_cast<int8_t>((i % 2 == 0) ? 1 : -1);
     }
     out_bias = 0;
@@ -80,7 +77,7 @@ void NetworkParameters::init_default_weights() {
 NNUEEvaluation::NNUEEvaluation() : network_loaded(false), current_file("") {
 }
 
-// Modern SCReL: (clamp(x, 0, 127)^2) / 128
+// SCReL non-linear activation: (clamp(x, 0, 127)^2) / 128
 inline int32_t screl(int16_t x) {
     int32_t clamped = std::max(0, std::min(127, static_cast<int>(x)));
     return (clamped * clamped) / 128;
@@ -91,31 +88,31 @@ inline int32_t screl_i32(int32_t x) {
     return (clamped * clamped) / 128;
 }
 
-int NNUEEvaluation::evaluate_accumulators(const Accumulator& us_acc, const Accumulator& them_acc) {
-    // 1. SCReL Activation on Accumulators: 512 inputs (256 us + 256 them)
-    alignas(64) int32_t l0_out[ACCUMULATOR_SIZE * 2];
-    for (int i = 0; i < ACCUMULATOR_SIZE; ++i) {
+int NNUEEvaluation::evaluate_accumulators(const BigAccumulator& us_acc, const BigAccumulator& them_acc) {
+    // 1. SCReL Activation on 11.5M Accumulator outputs: 512 inputs (256 us + 256 them)
+    alignas(64) int32_t l0_out[BIG_ACCUMULATOR_SIZE * 2];
+    for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
         l0_out[i] = screl(us_acc.values[i]);
-        l0_out[ACCUMULATOR_SIZE + i] = screl(them_acc.values[i]);
+        l0_out[BIG_ACCUMULATOR_SIZE + i] = screl(them_acc.values[i]);
     }
 
     // 2. Linear Layer 1: 512 -> 32
-    alignas(32) int32_t l1_out[L1_SIZE];
-    for (int o = 0; o < L1_SIZE; ++o) {
+    alignas(32) int32_t l1_out[BIG_L1_SIZE];
+    for (int o = 0; o < BIG_L1_SIZE; ++o) {
         int32_t sum = net.l1_biases[o] * WEIGHT_SCALE_L0;
-        const int8_t* w = net.l1_weights + o * (ACCUMULATOR_SIZE * 2);
-        for (int i = 0; i < ACCUMULATOR_SIZE * 2; ++i) {
+        const int8_t* w = net.l1_weights + o * (BIG_ACCUMULATOR_SIZE * 2);
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE * 2; ++i) {
             sum += l0_out[i] * w[i];
         }
         l1_out[o] = screl_i32(sum / (WEIGHT_SCALE_L0 * 8));
     }
 
     // 3. Linear Layer 2: 32 -> 32
-    alignas(32) int32_t l2_out[L2_SIZE];
-    for (int o = 0; o < L2_SIZE; ++o) {
+    alignas(32) int32_t l2_out[BIG_L2_SIZE];
+    for (int o = 0; o < BIG_L2_SIZE; ++o) {
         int32_t sum = net.l2_biases[o] * WEIGHT_SCALE_L1;
-        const int8_t* w = net.l2_weights + o * L1_SIZE;
-        for (int i = 0; i < L1_SIZE; ++i) {
+        const int8_t* w = net.l2_weights + o * BIG_L1_SIZE;
+        for (int i = 0; i < BIG_L1_SIZE; ++i) {
             sum += l1_out[i] * w[i];
         }
         l2_out[o] = screl_i32(sum / (WEIGHT_SCALE_L1 * 4));
@@ -123,7 +120,7 @@ int NNUEEvaluation::evaluate_accumulators(const Accumulator& us_acc, const Accum
 
     // 4. Output Layer: 32 -> 1
     int32_t sum = net.out_bias * WEIGHT_SCALE_L2;
-    for (int i = 0; i < L2_SIZE; ++i) {
+    for (int i = 0; i < BIG_L2_SIZE; ++i) {
         sum += l2_out[i] * net.out_weights[i];
     }
 
@@ -138,8 +135,8 @@ int NNUEEvaluation::evaluate(int white_king_sq, int black_king_sq,
     (void)white_king_sq;
     (void)black_king_sq;
 
-    Accumulator white_acc;
-    Accumulator black_acc;
+    BigAccumulator white_acc;
+    BigAccumulator black_acc;
 
     white_acc.clear(net.feature_biases);
     black_acc.clear(net.feature_biases);
@@ -158,12 +155,10 @@ int NNUEEvaluation::evaluate(int white_king_sq, int black_king_sq,
     }
 }
 
-// Custom .pchess native binary format loader
 bool NNUEEvaluation::load_pchess_file(const std::string& filepath) {
     std::ifstream file(filepath, std::ios::binary);
     if (!file.is_open()) return false;
 
-    // Check magic header
     char magic[32] = {0};
     file.read(magic, 24);
     if (std::string(magic).find("POINTCHESS") == std::string::npos) {
@@ -187,7 +182,6 @@ bool NNUEEvaluation::load_pchess_file(const std::string& filepath) {
     return false;
 }
 
-// .pnet format loader (PyTorch state dict / binary weight container)
 bool NNUEEvaluation::load_pnet_file(const std::string& filepath) {
     std::ifstream file(filepath, std::ios::binary);
     if (!file.is_open()) return false;

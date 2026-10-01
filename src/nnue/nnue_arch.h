@@ -1,6 +1,6 @@
 // PointChess - a chess engine in the Glaurung tradition.
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Modern HalfKAv2 NNUE Neural Network Architecture with SCReL
+// PointChess Dual-Network NNUE (Big Net ~11.5M Parameters + Fast Small Net)
 
 #pragma once
 
@@ -15,17 +15,19 @@
 namespace pointchess {
 namespace nnue {
 
-// Modern HalfKAv2 Feature Dimensions (King + All Pieces including Kings)
-// 11 Piece Types from friendly perspective:
-// 0: Friendly Pawn, 1: Friendly Knight, 2: Friendly Bishop, 3: Friendly Rook, 4: Friendly Queen, 5: Friendly King
-// 6: Enemy Pawn, 7: Enemy Knight, 8: Enemy Bishop, 9: Enemy Rook, 10: Enemy Queen
-constexpr int NUM_PIECE_TYPES = 11;
+// Modern HalfKAv2 Feature Dimensions (King + All 11 Piece Types)
+constexpr int NUM_PIECE_TYPES = 11; // 6 Friendly (P, N, B, R, Q, K), 5 Enemy (P, N, B, R, Q)
 constexpr int NUM_PIECE_SQUARES = 64;
 constexpr int HALF_KA_PIECE_FEATURES = NUM_PIECE_TYPES * NUM_PIECE_SQUARES; // 704
 constexpr int HALF_KA_FEATURES = 64 * HALF_KA_PIECE_FEATURES; // 45,056
-constexpr int ACCUMULATOR_SIZE = 256; // 256 per perspective -> 512 total
-constexpr int L1_SIZE = 32;
-constexpr int L2_SIZE = 32;
+
+// Big Network Dimensions (11.5 Million Parameters total)
+constexpr int BIG_ACCUMULATOR_SIZE = 256; // 256 per perspective -> 512 total
+constexpr int BIG_L1_SIZE = 32;
+constexpr int BIG_L2_SIZE = 32;
+
+// Fast Small Network Dimensions (for quick cutoff evaluation)
+constexpr int SMALL_ACCUMULATOR_SIZE = 32;
 
 // Quantization scales
 constexpr int WEIGHT_SCALE_L0 = 256;
@@ -34,51 +36,51 @@ constexpr int WEIGHT_SCALE_L2 = 64;
 constexpr int WEIGHT_SCALE_OUT = 16;
 constexpr int OUTPUT_SCALE = 16;
 
-// Custom PointChess format magic
-constexpr const char* PCHESS_MAGIC = "POINTCHESS_V2_HALFKAV2";
+// PointChess Dual-Net Custom Format Magic
+constexpr const char* PCHESS_MAGIC = "POINTCHESS_DUAL_NET_V2";
 
-// Accumulator for one perspective (White or Black king)
-struct alignas(64) Accumulator {
-    int16_t values[ACCUMULATOR_SIZE];
+// Accumulator for one perspective
+struct alignas(64) BigAccumulator {
+    int16_t values[BIG_ACCUMULATOR_SIZE];
 
     void clear(const int16_t* biases) {
         std::memcpy(values, biases, sizeof(values));
     }
 
     void add_feature(int feature_idx, const int16_t* weights) {
-        const int16_t* w = weights + feature_idx * ACCUMULATOR_SIZE;
-        for (int i = 0; i < ACCUMULATOR_SIZE; ++i) {
+        const int16_t* w = weights + feature_idx * BIG_ACCUMULATOR_SIZE;
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
             values[i] += w[i];
         }
     }
 
     void sub_feature(int feature_idx, const int16_t* weights) {
-        const int16_t* w = weights + feature_idx * ACCUMULATOR_SIZE;
-        for (int i = 0; i < ACCUMULATOR_SIZE; ++i) {
+        const int16_t* w = weights + feature_idx * BIG_ACCUMULATOR_SIZE;
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
             values[i] -= w[i];
         }
     }
 };
 
-// Network Weights structure
-struct alignas(64) NetworkParameters {
-    // Feature transformer: 45056 -> 256
-    int16_t feature_weights[HALF_KA_FEATURES * ACCUMULATOR_SIZE];
-    int16_t feature_biases[ACCUMULATOR_SIZE];
+// 11.5-Million Parameter Big Network Weights structure
+struct alignas(64) BigNetworkParameters {
+    // Feature Transformer: 45,056 x 256 = 11,534,336 parameters (11.5 Million)
+    int16_t feature_weights[HALF_KA_FEATURES * BIG_ACCUMULATOR_SIZE];
+    int16_t feature_biases[BIG_ACCUMULATOR_SIZE];
 
-    // Layer 1: 512 (256 W + 256 B) -> 32
-    int8_t l1_weights[ACCUMULATOR_SIZE * 2 * L1_SIZE];
-    int32_t l1_biases[L1_SIZE];
+    // Layer 1: 512 -> 32
+    int8_t l1_weights[BIG_ACCUMULATOR_SIZE * 2 * BIG_L1_SIZE];
+    int32_t l1_biases[BIG_L1_SIZE];
 
     // Layer 2: 32 -> 32
-    int8_t l2_weights[L1_SIZE * L2_SIZE];
-    int32_t l2_biases[L2_SIZE];
+    int8_t l2_weights[BIG_L1_SIZE * BIG_L2_SIZE];
+    int32_t l2_biases[BIG_L2_SIZE];
 
-    // Output layer: 32 -> 1
-    int8_t out_weights[L2_SIZE];
+    // Output Layer: 32 -> 1
+    int8_t out_weights[BIG_L2_SIZE];
     int32_t out_bias;
 
-    NetworkParameters();
+    BigNetworkParameters();
     void init_default_weights();
 };
 
@@ -87,32 +89,29 @@ public:
     NNUEEvaluation();
     ~NNUEEvaluation() = default;
 
-    // Custom .pchess format loader
     bool load_pchess_file(const std::string& filepath);
     bool load_network_file(const std::string& filepath);
     bool load_pnet_file(const std::string& filepath);
     bool is_loaded() const { return network_loaded; }
 
-    // Evaluation for side to move
+    // Evaluation using 11.5M Parameter Big Network with SCReL
     int evaluate(int white_king_sq, int black_king_sq,
                  const int* white_features, int num_white_features,
                  const int* black_features, int num_black_features,
                  int side_to_move);
 
-    // Fast evaluation from pre-computed accumulators
-    int evaluate_accumulators(const Accumulator& us_acc, const Accumulator& them_acc);
+    int evaluate_accumulators(const BigAccumulator& us_acc, const BigAccumulator& them_acc);
 
-    const NetworkParameters& params() const { return net; }
-    NetworkParameters& params_mut() { return net; }
+    const BigNetworkParameters& params() const { return net; }
+    BigNetworkParameters& params_mut() { return net; }
 
-    // Modern HalfKAv2 Feature index helper:
-    // King sq (0..63), piece_type (0..10), piece_sq (0..63)
+    // HalfKAv2 Feature index helper
     static inline int halfka_index(int king_sq, int piece_type, int sq) {
         return king_sq * HALF_KA_PIECE_FEATURES + piece_type * 64 + sq;
     }
 
 private:
-    NetworkParameters net;
+    BigNetworkParameters net;
     bool network_loaded;
     std::string current_file;
 };
