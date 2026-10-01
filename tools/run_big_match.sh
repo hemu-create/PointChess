@@ -15,9 +15,9 @@ echo " PGN Output:  match_60k.pgn | Log: match_60k.log"
 echo "============================================================"
 
 ../tools/fastchess \
-  -engine cmd=../build/pointchess name=PointChess option.EvalFile=../pointchess.pchess option.Use\ NNUE=true option.Personality=Solid option.Hash=16 \
-  -engine cmd=/usr/games/stockfish name=Stockfish option.Use\ NNUE=false option.Skill\ Level=2 option.Hash=16 \
+  -engine cmd=../build/pointchess name=PointChess_2B option.EvalFile=../pointchess.pchess option.Use\ NNUE=true option.Personality=Solid option.Hash=16 \
+  -engine cmd=/usr/games/stockfish name=Stockfish_NNUE option.Use\ NNUE=true option.Skill\ Level=1 option.Hash=16 \
   -each tc=$TC proto=uci \
   -rounds $ROUNDS -games 2 -repeat -concurrency $THREADS \
-  -pgnout file=match_60k.pgn \
-  -log file=match_60k.log
+  -pgnout file=match_60k_nnue.pgn \
+  -log file=match_60k_nnue.log
