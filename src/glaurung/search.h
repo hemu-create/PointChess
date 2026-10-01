@@ -57,6 +57,7 @@ struct SearchStack {
   Move mateKiller, killer1, killer2;
   Move threatMove;
   Depth reduction;
+  Move excludedMove; // Singular-extension excluded move (Stockfish-style)
 };
 
 

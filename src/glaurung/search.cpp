@@ -1196,6 +1196,38 @@ namespace {
       ttMove = ss[ply].pv[ply];
     }
 
+    // ProbCut (Stockfish-style, cf. tools/sf_ref/search.cpp Step 14):
+    // if a reduced-depth search of SEE-good captures already fails high
+    // over beta+margin, the node fails high.  Gated to depth>=5 plies so
+    // bullet-speed shallow nodes pay nothing.
+    if(depth >= 5*OnePly && !pos.is_check() && abs(beta) < VALUE_KNOWN_WIN
+       && ss[ply].excludedMove == MOVE_NONE && ttMove != MOVE_NONE
+       && !AbortSearch && !thread_should_stop(threadID)) {
+      Value probBeta = beta + Value(120);
+      Depth probDepth = depth - 4*OnePly;
+      MovePicker probMp = MovePicker(pos, false, ttMove, MOVE_NONE,
+                                     MOVE_NONE, MOVE_NONE, probDepth);
+      Bitboard probDc = probMp.discovered_check_candidates();
+      Move pm;
+      int probTried = 0;
+      while((pm = probMp.get_next_move()) != MOVE_NONE && probTried < 3) {
+        if(!pos.move_is_capture(pm) && !move_promotion(pm))
+          continue;
+        if(pos.see(pm) < int(probBeta - beta))
+          continue;
+        UndoInfo pu;
+        pos.do_move(pm, pu, probDc);
+        Value pv_ = -search(pos, ss, probBeta, probDepth, ply+1, false,
+                            threadID);
+        pos.undo_move(pm, pu);
+        if(AbortSearch || thread_should_stop(threadID))
+          break;
+        probTried++;
+        if(pv_ >= probBeta)
+          return pv_;
+      }
+    }
+
     // Initialize a MovePicker object for the current position, and prepare
     // to search all moves:
     MovePicker mp = MovePicker(pos, false, ttMove, ss[ply].mateKiller,
@@ -1220,11 +1252,47 @@ namespace {
       bool moveIsPassedPawnPush = pos.move_is_passed_pawn_push(move);
 
       assert(move_is_ok(move));
+      // Skip the singular-excluded move (set by the singular test below).
+      if(move == ss[ply].excludedMove)
+        continue;
       movesSearched[moveCount++] = ss[ply].currentMove = move;
 
       // Decide the new search depth.
       ext = extension(pos, move, false, moveIsCheck, singleReply, mateThreat);
       newDepth = depth - OnePly + ext;
+
+      // Singular extension (Stockfish Step 16, cf. tools/sf_ref/search.cpp):
+      // if the TT move fails high but every other move fails low on a
+      // reduced search without it, the TT move is singular (forced) and
+      // gets extended.  If several moves fail high without it, multi-cut
+      // prune.  Recursive excluded searches are skipped via excludedMove.
+      if(move == ttMove && ss[ply].excludedMove == MOVE_NONE
+         && depth >= 6*OnePly && ttFound && is_lower_bound(ttValueType)
+         && ttDepth >= depth - 3*OnePly && ttValue >= beta
+         && abs(ttValue) < VALUE_MATE - Value(100)
+         && abs(beta) < VALUE_KNOWN_WIN && !AbortSearch
+         && !thread_should_stop(threadID)) {
+        Value singularBeta = ttValue - Value(10 + 3*int(depth/OnePly));
+        Depth singularDepth = depth / 2;
+        ss[ply].excludedMove = move;
+        Value sValue = search(pos, ss, singularBeta, singularDepth, ply,
+                              false, threadID);
+        ss[ply].excludedMove = MOVE_NONE;
+        if(!AbortSearch && !thread_should_stop(threadID)) {
+          if(sValue < singularBeta) {
+            // Singular: extend one ply, two if far below the margin.
+            ext += OnePly;
+            if(sValue < singularBeta - Value(50))
+              ext += OnePly;
+            newDepth = depth - OnePly + ext;
+          }
+          else if(sValue >= beta) {
+            // Multi-cut: several moves fail high, prune this node.
+            return sValue;
+          }
+          // Else: non-singular but no multi-cut; search normally.
+        }
+      }
 
       // Futility pruning
       if(useFutilityPruning && ext == Depth(0) && !moveIsCapture &&
@@ -1848,6 +1916,7 @@ namespace {
       ss[i].killer2 = MOVE_NONE;
       ss[i].threatMove = MOVE_NONE;
       ss[i].reduction = Depth(0);
+      ss[i].excludedMove = MOVE_NONE;
     }
   }
 
@@ -1875,6 +1944,7 @@ namespace {
     ss[ply].pv[ply] = ss[ply].pv[ply+1] = ss[ply].currentMove = MOVE_NONE;
     ss[ply+2].mateKiller = MOVE_NONE;
     ss[ply+2].killer1 = ss[ply+2].killer2 = MOVE_NONE;
+    ss[ply+2].excludedMove = MOVE_NONE;
     ss[ply].threatMove = MOVE_NONE;
     ss[ply].reduction = Depth(0);
     ss[ply].currentMoveCaptureValue = Value(0);
