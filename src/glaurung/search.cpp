@@ -424,29 +424,27 @@ void think(const Position &pos, bool infinite, bool ponder, int time,
     assert(thread_is_available(i, 0));
 
   // Set thinking time:
-  if(!movesToGo) { // Sudden death time control
-    if(increment) {
-      MaxSearchTime = time / 30 + increment;
-      AbsoluteMaxSearchTime = Max(time / 4, increment - 100);
+  if(time > 0) {
+    if(!movesToGo) { // Sudden death time control
+      if(increment > 0) {
+        MaxSearchTime = time / 25 + (increment * 3) / 4;
+        AbsoluteMaxSearchTime = Min(time - 10, time / 3 + increment);
+      }
+      else { // Blitz game without increment
+        MaxSearchTime = time / 30;
+        AbsoluteMaxSearchTime = Min(time - 10, time / 6);
+      }
     }
-    else { // Blitz game without increment
-      MaxSearchTime = time / 40;
-      AbsoluteMaxSearchTime = time / 8;
+    else { // (x moves) / (y minutes)
+      MaxSearchTime = time / Min(movesToGo, 25) + (increment * 3) / 4;
+      AbsoluteMaxSearchTime = Min(time - 10, (2 * time) / Min(movesToGo, 10));
     }
+    if(AbsoluteMaxSearchTime <= 0) AbsoluteMaxSearchTime = Max(1, time - 5);
+    if(MaxSearchTime > AbsoluteMaxSearchTime) MaxSearchTime = AbsoluteMaxSearchTime;
   }
-  else { // (x moves) / (y minutes)
-    if(movesToGo == 1) {
-      MaxSearchTime = time / 2;
-      AbsoluteMaxSearchTime = Min(time / 2, time - 500);
-    }
-    else {
-      MaxSearchTime = time / Min(movesToGo, 20);
-      AbsoluteMaxSearchTime = Min((4 * time) / movesToGo, time / 3);
-    }
-  }
-  if(PonderingEnabled) {
-    MaxSearchTime += MaxSearchTime / 4;
-    MaxSearchTime = Min(MaxSearchTime, AbsoluteMaxSearchTime);
+  else {
+    MaxSearchTime = 1000000;
+    AbsoluteMaxSearchTime = 1000000;
   }
 
   // Fixed depth or fixed number of nodes?
@@ -456,11 +454,11 @@ void think(const Position &pos, bool infinite, bool ponder, int time,
 
   MaxNodes = maxNodes;
   if(MaxNodes) {
-    NodesBetweenPolls = Min(MaxNodes, 30000);
+    NodesBetweenPolls = Min(MaxNodes, 1000);
     InfiniteSearch = true; // HACK
   }
   else
-    NodesBetweenPolls = 30000;
+    NodesBetweenPolls = 1000;
 
   // We're ready to start thinking.  Call the iterative deepening loop
   // function:
@@ -2107,13 +2105,12 @@ namespace {
     }
 
     // Should we stop the search?
-    if(!PonderSearch && Iteration >= 2 &&
-       (!InfiniteSearch && (t > AbsoluteMaxSearchTime ||
-                            (RootMoveNumber == 1 &&
-                             t > MaxSearchTime + ExtraSearchTime) ||
-                            (!FailHigh && !fail_high_ply_1() && !Problem &&
-                             t > 6*(MaxSearchTime + ExtraSearchTime)))))
-      AbortSearch = true;
+    if(!PonderSearch && !InfiniteSearch) {
+      if(t >= AbsoluteMaxSearchTime)
+        AbortSearch = true;
+      else if(Iteration >= 2 && t >= MaxSearchTime + ExtraSearchTime)
+        AbortSearch = true;
+    }
 
     if(!PonderSearch && ExactMaxTime && t >= ExactMaxTime)
       AbortSearch = true;
@@ -2131,14 +2128,11 @@ namespace {
   void ponderhit() {
     int t = current_search_time();
     PonderSearch = false;
-    if(Iteration >= 2 &&
-       (!InfiniteSearch && (StopOnPonderhit ||
-                            t > AbsoluteMaxSearchTime ||
-                            (RootMoveNumber == 1 &&
-                             t > MaxSearchTime + ExtraSearchTime) ||
-                            (!FailHigh && !fail_high_ply_1() && !Problem &&
-                             t > 6*(MaxSearchTime + ExtraSearchTime)))))
-      AbortSearch = true;
+    if(!InfiniteSearch) {
+      if(StopOnPonderhit || t >= AbsoluteMaxSearchTime ||
+         (Iteration >= 2 && t >= MaxSearchTime + ExtraSearchTime))
+        AbortSearch = true;
+    }
   }
 
 
