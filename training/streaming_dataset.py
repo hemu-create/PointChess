@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Streaming Billion-Position Dataset Reader for PyTorch
 
+import os
 import torch
 from torch.utils.data import IterableDataset
 from dataset import fen_to_halfka_features
