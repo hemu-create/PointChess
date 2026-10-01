@@ -124,8 +124,8 @@ int NNUEEvaluation::evaluate_accumulators(const BigAccumulator& us_acc, const Bi
         sum += l2_out[i] * net.out_weights[i];
     }
 
-    int score = sum / 128;
-    return std::clamp(score, -800, 800);
+    int score = sum / 256;
+    return std::clamp(score, -500, 500);
 }
 
 int NNUEEvaluation::evaluate(int white_king_sq, int black_king_sq,

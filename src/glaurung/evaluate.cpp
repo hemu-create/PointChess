@@ -470,7 +470,7 @@ Value evaluate(const Position &pos, EvalInfo &ei, int threadID) {
   if (pointchess::EvaluationManager::instance().get_config().use_nnue &&
       pointchess::EvaluationManager::instance().active_backend() != pointchess::BACKEND_CPU_CLASSICAL) {
     Value nnue_val = pointchess::nnue::evaluate_nnue(pos);
-    return Value(int(base_eval) + (int(nnue_val) / 4));
+    return Value(int(base_eval) + int(nnue_val));
   }
 
   return base_eval;

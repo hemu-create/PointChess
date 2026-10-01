@@ -83,59 +83,68 @@ def train_4b(args):
     os.makedirs(args.output_dir, exist_ok=True)
     positions_seen = 0
     batch_idx = 0
+    epoch = 0
     start_time = time.time()
     last_log_time = time.time()
     accum_loss = 0.0
 
     model.train()
-    for batch in loader:
-        w_f = batch['w_features'].to(device, non_blocking=True)
-        w_off = batch['w_offsets'].to(device, non_blocking=True)
-        b_f = batch['b_features'].to(device, non_blocking=True)
-        b_off = batch['b_offsets'].to(device, non_blocking=True)
-        stm = batch['stm'].to(device, non_blocking=True)
-        target_eval = batch['score'].to(device, non_blocking=True)
-        target_wdl = batch['result'].to(device, non_blocking=True)
-        weights = batch.get('weight', torch.ones_like(target_eval)).to(device, non_blocking=True)
+    # Infinite cycling over dataset to reach 4B positions from ~1.28M file
+    # (3125 epochs needed). Reshuffles each pass via fresh DataLoader.
+    while positions_seen < args.max_positions:
+        epoch += 1
+        if is_main and epoch > 1:
+            print(f"--- Starting epoch pass {epoch} over dataset (seen {positions_seen:,} pos) ---")
+        for batch in loader:
+            if positions_seen >= args.max_positions:
+                break
+            w_f = batch['w_features'].to(device, non_blocking=True)
+            w_off = batch['w_offsets'].to(device, non_blocking=True)
+            b_f = batch['b_features'].to(device, non_blocking=True)
+            b_off = batch['b_offsets'].to(device, non_blocking=True)
+            stm = batch['stm'].to(device, non_blocking=True)
+            target_eval = batch['score'].to(device, non_blocking=True)
+            target_wdl = batch['result'].to(device, non_blocking=True)
+            weights = batch.get('weight', torch.ones_like(target_eval)).to(device, non_blocking=True)
 
-        optimizer.zero_grad(set_to_none=True)
+            optimizer.zero_grad(set_to_none=True)
 
-        with torch.amp.autocast('cuda', enabled=torch.cuda.is_available()):
-            pred_score = model(w_f, w_off, b_f, b_off, stm)
-            # Weighted loss prioritizing tactical weaknesses and blunders
-            raw_loss = raw_model.compute_loss(pred_score, target_eval, target_wdl, lambda_val=0.8)
-            weighted_loss = (raw_loss * weights).mean()
+            with torch.amp.autocast('cuda', enabled=torch.cuda.is_available()):
+                pred_score = model(w_f, w_off, b_f, b_off, stm)
+                # Weighted loss prioritizing tactical weaknesses and blunders
+                raw_loss = raw_model.compute_loss(pred_score, target_eval, target_wdl, lambda_val=0.8)
+                weighted_loss = (raw_loss * weights).mean()
 
-        scaler.scale(weighted_loss).backward()
-        scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        scaler.step(optimizer)
-        scaler.update()
+            scaler.scale(weighted_loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            scaler.step(optimizer)
+            scaler.update()
 
-        curr_batch_size = len(target_eval)
-        positions_seen += curr_batch_size * world_size
-        batch_idx += 1
-        accum_loss += weighted_loss.item()
+            curr_batch_size = len(target_eval)
+            positions_seen += curr_batch_size * world_size
+            batch_idx += 1
+            accum_loss += weighted_loss.item()
 
-        # Real-time streaming metrics logging
-        if batch_idx % args.log_interval == 0 and is_main:
-            now = time.time()
-            speed = (args.log_interval * args.batch_size * world_size) / (now - last_log_time)
-            avg_loss = accum_loss / args.log_interval
-            print(f"[{positions_seen:,}/{args.max_positions:,} pos] | Loss: {avg_loss:.4f} | Throughput: {int(speed):,} pos/sec | Elapsed: {int(now - start_time)}s")
-            accum_loss = 0.0
-            last_log_time = now
+            # Real-time streaming metrics logging
+            if batch_idx % args.log_interval == 0 and is_main:
+                now = time.time()
+                speed = (args.log_interval * args.batch_size * world_size) / (now - last_log_time)
+                avg_loss = accum_loss / args.log_interval
+                print(f"[{positions_seen:,}/{args.max_positions:,} pos] | Loss: {avg_loss:.4f} | Throughput: {int(speed):,} pos/sec | Elapsed: {int(now - start_time)}s")
+                accum_loss = 0.0
+                last_log_time = now
 
-        # Periodic checkpoint
-        if batch_idx % args.save_interval == 0 and is_main:
-            ckpt_path = os.path.join(args.output_dir, f"model_{positions_seen // 1000000}M.pt")
-            best_path = os.path.join(args.output_dir, "best_model.pt")
-            torch.save({'model_state_dict': raw_model.state_dict(), 'positions_seen': positions_seen}, ckpt_path)
-            torch.save({'model_state_dict': raw_model.state_dict(), 'positions_seen': positions_seen}, best_path)
-            print(f" -> Checkpointed to {ckpt_path}")
+            # Periodic checkpoint
+            if batch_idx % args.save_interval == 0 and is_main:
+                ckpt_path = os.path.join(args.output_dir, f"model_{positions_seen // 1000000}M.pt")
+                best_path = os.path.join(args.output_dir, "best_model.pt")
+                torch.save({'model_state_dict': raw_model.state_dict(), 'positions_seen': positions_seen}, ckpt_path)
+                torch.save({'model_state_dict': raw_model.state_dict(), 'positions_seen': positions_seen}, best_path)
+                print(f" -> Checkpointed to {ckpt_path}")
 
-        if positions_seen >= args.max_positions:
-            break
+            if positions_seen >= args.max_positions:
+                break
 
     if is_main:
         best_path = os.path.join(args.output_dir, "best_model.pt")
