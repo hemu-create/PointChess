@@ -1342,6 +1342,8 @@ namespace {
           && !move_promotion(move) && pos.see(move) < 0)
         continue;
 
+      Piece movingPiece = pos.piece_on(move_from(move));
+
       // Make and search the move.
       pos.do_move(move, u, dcCandidates);
       
@@ -1354,7 +1356,7 @@ namespace {
         if(move == ss[ply].killer1 || move == ss[ply].killer2 || move == countermove)
           r = Max(Depth(0), r - OnePly);
 
-        int hist = H.move_ordering_score(pos.piece_on(move_to(move)), move, prevMove, prevPiece);
+        int hist = H.move_ordering_score(movingPiece, move, prevMove, prevPiece);
         if (hist > 4000) r = Max(Depth(0), r - OnePly);
         else if (hist < -4000) r += OnePly;
 
