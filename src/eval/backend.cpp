@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "backend.h"
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 #include "../nnue/nnue_arch.h"
 #include <cstdlib>
 #include <iostream>
@@ -94,7 +97,11 @@ void EvaluationManager::set_backend(const std::string& backend_name) {
 #if defined(_WIN32)
         std::cout << "info string PointChess backend set to GPU (Windows DirectX / Vulkan / CUDA Hardware Acceleration enabled)" << std::endl;
 #elif defined(__APPLE__)
+  #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+        std::cout << "info string PointChess backend set to GPU (Apple iOS / iPadOS Metal GPU Acceleration enabled)" << std::endl;
+  #else
         std::cout << "info string PointChess backend set to GPU (macOS Apple Silicon Metal Acceleration enabled)" << std::endl;
+  #endif
 #else
         std::cout << "info string PointChess backend set to GPU (Universal Hardware / GPU Acceleration enabled)" << std::endl;
 #endif

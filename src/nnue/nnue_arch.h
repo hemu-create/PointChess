@@ -13,6 +13,8 @@
 #include <algorithm>
 #if defined(__AVX2__)
 #include <immintrin.h>
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+#include <arm_neon.h>
 #endif
 
 namespace pointchess {
@@ -53,6 +55,12 @@ struct alignas(64) BigAccumulator {
         for (int i = 0; i < BIG_ACCUMULATOR_SIZE / 16; ++i) {
             _mm256_store_si256(dst + i, _mm256_loadu_si256(src + i));
         }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+        const int16x8_t* src = reinterpret_cast<const int16x8_t*>(biases);
+        int16x8_t* dst = reinterpret_cast<int16x8_t*>(values);
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE / 8; ++i) {
+            vst1q_s16(reinterpret_cast<int16_t*>(dst + i), vld1q_s16(reinterpret_cast<const int16_t*>(src + i)));
+        }
 #else
         std::memcpy(values, biases, sizeof(values));
 #endif
@@ -65,6 +73,14 @@ struct alignas(64) BigAccumulator {
         __m256i* dst = reinterpret_cast<__m256i*>(values);
         for (int i = 0; i < BIG_ACCUMULATOR_SIZE / 16; ++i) {
             _mm256_store_si256(dst + i, _mm256_add_epi16(_mm256_load_si256(dst + i), _mm256_loadu_si256(src + i)));
+        }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+        const int16x8_t* src = reinterpret_cast<const int16x8_t*>(w);
+        int16x8_t* dst = reinterpret_cast<int16x8_t*>(values);
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE / 8; ++i) {
+            int16x8_t a = vld1q_s16(reinterpret_cast<const int16_t*>(dst + i));
+            int16x8_t b = vld1q_s16(reinterpret_cast<const int16_t*>(src + i));
+            vst1q_s16(reinterpret_cast<int16_t*>(dst + i), vaddq_s16(a, b));
         }
 #else
         for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
@@ -80,6 +96,14 @@ struct alignas(64) BigAccumulator {
         __m256i* dst = reinterpret_cast<__m256i*>(values);
         for (int i = 0; i < BIG_ACCUMULATOR_SIZE / 16; ++i) {
             _mm256_store_si256(dst + i, _mm256_sub_epi16(_mm256_load_si256(dst + i), _mm256_loadu_si256(src + i)));
+        }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+        const int16x8_t* src = reinterpret_cast<const int16x8_t*>(w);
+        int16x8_t* dst = reinterpret_cast<int16x8_t*>(values);
+        for (int i = 0; i < BIG_ACCUMULATOR_SIZE / 8; ++i) {
+            int16x8_t a = vld1q_s16(reinterpret_cast<const int16_t*>(dst + i));
+            int16x8_t b = vld1q_s16(reinterpret_cast<const int16_t*>(src + i));
+            vst1q_s16(reinterpret_cast<int16_t*>(dst + i), vsubq_s16(a, b));
         }
 #else
         for (int i = 0; i < BIG_ACCUMULATOR_SIZE; ++i) {
