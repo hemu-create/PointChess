@@ -933,12 +933,15 @@ namespace {
 
     Move prevMove = (ply > 0) ? ss[ply-1].currentMove : MOVE_NONE;
     Piece prevPiece = (prevMove != MOVE_NONE && move_is_ok(prevMove)) ? pos.piece_on(move_to(prevMove)) : NO_PIECE;
+    Move prevMove2 = (ply > 1) ? ss[ply-2].currentMove : MOVE_NONE;
+    Piece prevPiece2 = (prevMove2 != MOVE_NONE && move_is_ok(prevMove2)) ? pos.piece_on(move_to(prevMove2)) : NO_PIECE;
     Move countermove = H.get_countermove(prevMove);
 
     // Initialize a MovePicker object for the current position, and prepare
     // to search all moves:
     MovePicker mp = MovePicker(pos, true, ttMove, ss[ply].mateKiller,
-                               ss[ply].killer1, ss[ply].killer2, depth, countermove, prevMove, prevPiece);
+                               ss[ply].killer1, ss[ply].killer2, depth, countermove,
+                               prevMove, prevPiece, prevMove2, prevPiece2);
     Move move, movesSearched[256];
     int moveCount = 0;
     Value value, bestValue = -VALUE_INFINITE;
@@ -1060,9 +1063,9 @@ namespace {
                && !move_promotion(movesSearched[i])
                && !move_is_ep(movesSearched[i]))
               H.failure(pos.piece_on(move_from(movesSearched[i])),
-                        movesSearched[i], depth, prevMove, prevPiece);
+                        movesSearched[i], depth, prevMove, prevPiece, prevMove2, prevPiece2);
 
-          H.success(pos.piece_on(move_from(m)), m, depth, prevMove, prevPiece);
+          H.success(pos.piece_on(move_from(m)), m, depth, prevMove, prevPiece, prevMove2, prevPiece2);
           if(ply > 0 && ss[ply-1].currentMove != MOVE_NONE)
             H.update_countermove(ss[ply-1].currentMove, m);
           
@@ -1070,6 +1073,9 @@ namespace {
             ss[ply].killer2 = ss[ply].killer1;
             ss[ply].killer1 = m;
           }
+        }
+        else if(!pos.square_is_empty(move_to(m))) {
+          H.capture_success(pos.piece_on(move_from(m)), m, pos.type_of_piece_on(move_to(m)), depth);
         }
         TT.store(pos, value_to_tt(bestValue, ply), depth, m, VALUE_TYPE_LOWER);
       }
@@ -1236,12 +1242,15 @@ namespace {
 
     Move prevMove = (ply > 0) ? ss[ply-1].currentMove : MOVE_NONE;
     Piece prevPiece = (prevMove != MOVE_NONE && move_is_ok(prevMove)) ? pos.piece_on(move_to(prevMove)) : NO_PIECE;
+    Move prevMove2 = (ply > 1) ? ss[ply-2].currentMove : MOVE_NONE;
+    Piece prevPiece2 = (prevMove2 != MOVE_NONE && move_is_ok(prevMove2)) ? pos.piece_on(move_to(prevMove2)) : NO_PIECE;
     Move countermove = H.get_countermove(prevMove);
 
     // Initialize a MovePicker object for the current position, and prepare
     // to search all moves:
     MovePicker mp = MovePicker(pos, false, ttMove, ss[ply].mateKiller,
-                               ss[ply].killer1, ss[ply].killer2, depth, countermove, prevMove, prevPiece);
+                               ss[ply].killer1, ss[ply].killer2, depth, countermove,
+                               prevMove, prevPiece, prevMove2, prevPiece2);
     Move move, movesSearched[256];
     int moveCount = 0;
     Value value, bestValue = -VALUE_INFINITE, futilityValue = VALUE_NONE;
@@ -1419,8 +1428,8 @@ namespace {
                && !move_promotion(movesSearched[i])
                && !move_is_ep(movesSearched[i]))
               H.failure(pos.piece_on(move_from(movesSearched[i])),
-                        movesSearched[i], depth, prevMove, prevPiece);
-          H.success(pos.piece_on(move_from(m)), m, depth, prevMove, prevPiece);
+                        movesSearched[i], depth, prevMove, prevPiece, prevMove2, prevPiece2);
+          H.success(pos.piece_on(move_from(m)), m, depth, prevMove, prevPiece, prevMove2, prevPiece2);
           if(ply > 0 && ss[ply-1].currentMove != MOVE_NONE)
             H.update_countermove(ss[ply-1].currentMove, m);
           
@@ -1428,6 +1437,9 @@ namespace {
             ss[ply].killer2 = ss[ply].killer1;
             ss[ply].killer1 = m;
           }
+        }
+        else if(!pos.square_is_empty(move_to(m))) {
+          H.capture_success(pos.piece_on(move_from(m)), m, pos.type_of_piece_on(move_to(m)), depth);
         }
         TT.store(pos, value_to_tt(bestValue, ply), depth, m, VALUE_TYPE_LOWER);
       }

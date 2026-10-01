@@ -77,7 +77,8 @@ namespace {
 /// move ordering is at the current node.
 
 MovePicker::MovePicker(Position &p, bool pvnode, Move ttm, Move mk,
-                       Move k1, Move k2, Depth dpth, Move cm, Move prevM, Piece prevP) {
+                       Move k1, Move k2, Depth dpth, Move cm,
+                       Move prevM, Piece prevP, Move prevM2, Piece prevP2) {
   pos = &p;
   pvNode = pvnode;
   ttMove = ttm;
@@ -87,6 +88,8 @@ MovePicker::MovePicker(Position &p, bool pvnode, Move ttm, Move mk,
   countermove = cm;
   prevMove = prevM;
   prevPiece = prevP;
+  prevMove2 = prevM2;
+  prevPiece2 = prevP2;
   depth = dpth;
   movesPicked = 0;
   numOfMoves = 0;
@@ -261,19 +264,23 @@ int MovePicker::number_of_moves() const {
 /// MovePicker::pick_move_from_list().
 
 void MovePicker::score_captures() {
-  // Winning and equal captures in the main search are ordered by strict MVV/LVA
+  // Winning and equal captures in the main search are ordered by strict MVV/LVA + Capture History
   for(int i = 0; i < numOfMoves; i++) {
     int seeValue = pos->see(moves[i].move);
+    Piece movingPiece = pos->piece_on(move_from(moves[i].move));
+    PieceType capturedType = pos->type_of_piece_on(move_to(moves[i].move));
+    int capHist = H.capture_score(movingPiece, moves[i].move, capturedType);
+
     if(seeValue >= 0) {
       if(move_promotion(moves[i].move))
-        moves[i].score = int(QueenValueMidgame) * 20;
+        moves[i].score = int(QueenValueMidgame) * 20 + capHist;
       else 
         moves[i].score =
           int(pos->midgame_value_of_piece_on(move_to(moves[i].move))) * 16 -
-          int(pos->midgame_value_of_piece_on(move_from(moves[i].move))) + 10000;
+          int(pos->midgame_value_of_piece_on(move_from(moves[i].move))) + 10000 + capHist;
     }
     else
-      moves[i].score = seeValue;
+      moves[i].score = seeValue + capHist;
   }
 }
 
@@ -287,7 +294,9 @@ void MovePicker::score_noncaptures() {
     else if(m == countermove)
       moves[i].score = HistoryMax + 1;
     else
-      moves[i].score = H.move_ordering_score(pos->piece_on(move_from(m)), m, prevMove, prevPiece);
+      moves[i].score = H.move_ordering_score(pos->piece_on(move_from(m)), m,
+                                             prevMove, prevPiece,
+                                             prevMove2, prevPiece2);
   }
 }
 
