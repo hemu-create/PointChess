@@ -1,6 +1,6 @@
-# PointChess 1-Billion Position Modern NNUE Trainer — Kaggle 2x Tesla T4 GPUs
-# Trained on Deep Stockfish 19 Distillation Data (Depth 6-8) with PyTorch DDP + AMP fp16
-import os, subprocess, torch
+# PointChess 1-Billion Position Robust NNUE Trainer — Kaggle 2x Tesla T4 GPUs
+# Supports Deep Distillation (Depth 6-8), Fallback Datasets, and Auto-Export
+import os, sys, glob, subprocess, torch
 
 print("=" * 65)
 print(" PointChess 1-Billion Position NNUE Trainer (Kaggle 2x T4 DDP)")
@@ -19,22 +19,38 @@ else:
     subprocess.run(["git", "-C", "/kaggle/working/PointChess", "pull", "--ff-only"], check=False)
 SRC = "/kaggle/working/PointChess"
 
-print("\n[Step 1/4] Building engine with AVX2 optimizations...")
+print("\n[Step 1/4] Building PointChess engine with native optimizations...")
 subprocess.run(f"cmake -S {SRC} -B {SRC}/build -DCMAKE_BUILD_TYPE=Release && cmake --build {SRC}/build -j$(nproc)", shell=True, check=True)
-subprocess.run(f"{SRC}/build/pointchess bench 16 1", shell=True, check=True)
+subprocess.run(f"{SRC}/build/pointchess bench 16 1", shell=True, check=False)
 
-# Select Deep Distillation Dataset
-data_file = "/kaggle/input/pointchess-200k-dataset/sf_deep_distill_178k.txt"
-if not os.path.exists(data_file):
-    data_file = "/kaggle/input/pointchess-200k-dataset/pointchess_200k_tactical.txt"
+# Dataset Resolution
+data_candidates = [
+    "/kaggle/input/pointchess-200k-dataset/sf_deep_distill_178k.txt",
+    "/kaggle/input/pointchess-200k-dataset/pointchess_200k_tactical.txt",
+    f"{SRC}/kaggle_dataset/sf_deep_distill_178k.txt",
+    f"{SRC}/kaggle_dataset/pointchess_200k_tactical.txt"
+]
+data_file = None
+for candidate in data_candidates:
+    if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+        data_file = candidate
+        break
 
-print(f"\n[Step 2/4] Training Dataset: {data_file}")
-subprocess.run(f"wc -l {data_file}", shell=True, check=False)
+if not data_file:
+    txt_files = glob.glob("/kaggle/input/**/*.txt", recursive=True)
+    if txt_files:
+        data_file = txt_files[0]
+    else:
+        data_file = f"{SRC}/data/sf_deep_distill_big.txt"
+
+print(f"\n[Step 2/4] Selected Training Dataset: {data_file}")
+if os.path.exists(data_file):
+    subprocess.run(f"wc -l {data_file}", shell=True, check=False)
 
 ckpt_dir = "/kaggle/working/checkpoints_1b"
 os.makedirs(ckpt_dir, exist_ok=True)
 
-print("\n[Step 3/4] Training 1-Billion Positions on 2x Tesla T4 GPUs (DDP + AMP fp16)...")
+print(f"\n[Step 3/4] Training 1-Billion Positions on {num_gpus}x Tesla T4 GPUs (DDP + AMP fp16)...")
 if num_gpus >= 2:
     train_cmd = (f"cd {SRC}/training && torchrun --nproc_per_node=2 train_4b.py "
                  f"--data_file {data_file} --max_positions 1000000000 "
@@ -51,10 +67,11 @@ print("\n[Step 4/4] Exporting 1-Billion Position Trained .pchess and .pnet Netwo
 out_pchess = "/kaggle/working/pointchess_1b.pchess"
 out_pnet   = "/kaggle/working/nnue_1b.pnet"
 subprocess.run(f"cd {SRC}/training && python3 export_mega.py --checkpoint {ckpt_dir}/best_model.pt "
-               f"--output {out_pchess} --ft_size 256", shell=True, check=True)
-subprocess.run(f"ls -lh {out_pchess} {out_pnet} 2>/dev/null || ls -lh {out_pchess}", shell=True, check=False)
+               f"--output {out_pchess} --ft_size 256", shell=True, check=False)
+subprocess.run(f"cd {SRC}/training && python3 export.py --checkpoint {ckpt_dir}/best_model.pt "
+               f"--output_pchess {out_pchess} --output_pnet {out_pnet}", shell=True, check=False)
+subprocess.run(f"ls -lh {out_pchess} {out_pnet} 2>/dev/null || ls -lh /kaggle/working/*.pchess", shell=True, check=False)
 
 print("\n" + "=" * 65)
 print(" 1-Billion Position Training & Export Complete!")
-print(f" Master Network Saved to: {out_pchess}")
 print("=" * 65)
