@@ -315,15 +315,19 @@ void MovePicker::score_evasions() {
 }
 
 void MovePicker::score_qcaptures() {
-  // Use MVV/LVA ordering.
+  // Use MVV/LVA ordering + Capture History
   for(int i = 0; i < numOfMoves; i++) {
     Move m = moves[i].move;
+    Piece movingPiece = pos->piece_on(move_from(m));
+    PieceType capturedType = pos->type_of_piece_on(move_to(m));
+    int capHist = H.capture_score(movingPiece, m, capturedType);
+
     if(move_promotion(m))
-      moves[i].score = int(QueenValueMidgame) * 20;
+      moves[i].score = int(QueenValueMidgame) * 20 + capHist;
     else
       moves[i].score =
         int(pos->midgame_value_of_piece_on(move_to(m))) * 16 -
-        int(pos->midgame_value_of_piece_on(move_from(m)));
+        int(pos->midgame_value_of_piece_on(move_from(m))) + capHist;
   }
 }
 

@@ -923,7 +923,7 @@ namespace {
     Move ttMove = MOVE_NONE;
     ValueType ttValueType;
 
-    TT.retrieve(pos, &ttValue, &ttDepth, &ttMove, &ttValueType);
+    bool ttFound = TT.retrieve(pos, &ttValue, &ttDepth, &ttMove, &ttValueType);
 
     // Internal iterative deepening.
     if(UseIIDAtPVNodes && ttMove == MOVE_NONE && depth >= 5*OnePly) {
@@ -971,6 +971,29 @@ namespace {
       ext = extension(pos, move, true, moveIsCheck, singleReply, mateThreat);
       newDepth = depth - OnePly + ext;
 
+      // Singular extension at PV node
+      if(move == ttMove && ss[ply].excludedMove == MOVE_NONE
+         && depth >= 6*OnePly && ttFound && is_lower_bound(ttValueType)
+         && ttDepth >= depth - 3*OnePly && ttValue >= beta
+         && abs(ttValue) < VALUE_MATE - Value(100)
+         && abs(beta) < VALUE_KNOWN_WIN && !AbortSearch
+         && !thread_should_stop(threadID)) {
+        Value singularBeta = ttValue - Value(10 + 3*int(depth/OnePly));
+        Depth singularDepth = depth / 2;
+        ss[ply].excludedMove = move;
+        Value sValue = search(pos, ss, singularBeta, singularDepth, ply,
+                              false, threadID);
+        ss[ply].excludedMove = MOVE_NONE;
+        if(!AbortSearch && !thread_should_stop(threadID)) {
+          if(sValue < singularBeta) {
+            ext += OnePly;
+            if(sValue < singularBeta - Value(40))
+              ext += OnePly;
+            newDepth = depth - OnePly + ext;
+          }
+        }
+      }
+
       // Make and search the move.
       pointchess::nnue::update_accumulator_move(pos, move, ply, threadID);
       pos.do_move(move, u, dcCandidates);
@@ -984,8 +1007,12 @@ namespace {
           int d_idx = Min(63, int(depth / OnePly));
           int mc_idx = Min(63, moveCount);
           Depth r = LMRTable[1][d_idx][mc_idx];
-          if(move == ss[ply].killer1 || move == ss[ply].killer2)
+          if(move == ss[ply].killer1 || move == ss[ply].killer2 || move == countermove)
             r = Max(Depth(0), r - OnePly);
+
+          int hist = H.move_ordering_score(pos.piece_on(move_from(move)), move, prevMove, prevPiece, prevMove2, prevPiece2);
+          if (hist > 4000) r = Max(Depth(0), r - OnePly);
+          else if (hist < -4000) r += OnePly;
           if(r >= newDepth) r = newDepth - OnePly;
           ss[ply].reduction = r;
           value = -search(pos, ss, -alpha, newDepth - r, ply+1, true, 
