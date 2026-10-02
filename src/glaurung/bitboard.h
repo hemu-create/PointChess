@@ -235,7 +235,18 @@ inline Bitboard ray_bb(Square s, SignedDirection d) {
 /// bitboard of occupied squares as input, and return a bitboard representing
 /// all squares attacked by a rook, bishop or queen on the given square.
 
-#if defined(USE_COMPACT_ROOK_ATTACKS)
+#if defined(__BMI2__) && (defined(__x86_64__) || defined(_M_X64))
+#include <immintrin.h>
+
+inline Bitboard rook_attacks_bb(Square s, Bitboard blockers) {
+  return RAttacks[RAttackIndex[s] + _pext_u64(blockers, RMask[s])];
+}
+
+inline Bitboard bishop_attacks_bb(Square s, Bitboard blockers) {
+  return BAttacks[BAttackIndex[s] + _pext_u64(blockers, BMask[s])];
+}
+
+#elif defined(USE_COMPACT_ROOK_ATTACKS)
 
 inline Bitboard file_attacks_bb(Square s, Bitboard blockers) {
   Bitboard b = (blockers >> square_file(s)) & 0x01010101010100ULL;
@@ -271,6 +282,7 @@ inline Bitboard rook_attacks_bb(Square s, Bitboard blockers) {
 
 #endif
 
+#if !defined(__BMI2__) || (!defined(__x86_64__) && !defined(_M_X64))
 #if defined(USE_32BIT_ATTACKS)
 
 inline Bitboard bishop_attacks_bb(Square s, Bitboard blockers) {
@@ -289,6 +301,7 @@ inline Bitboard bishop_attacks_bb(Square s, Bitboard blockers) {
 }
 
 #endif // defined(USE_32BIT_ATTACKS)
+#endif
 
 inline Bitboard queen_attacks_bb(Square s, Bitboard blockers) {
   return rook_attacks_bb(s, blockers) | bishop_attacks_bb(s, blockers);

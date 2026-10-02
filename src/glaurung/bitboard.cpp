@@ -487,7 +487,10 @@ namespace {
       mask[i] = sliding_attacks(i, 0ULL, 4, deltas, 1, 6, 1, 6);      
       j = (1 << (64 - shift[i]));
       for(k = 0; k < j; k++) {
-#if defined(USE_32BIT_ATTACKS)
+#if defined(__BMI2__) && (defined(__x86_64__) || defined(_M_X64))
+        b = index_to_bitboard(k, mask[i]);
+        attacks[index + k] = sliding_attacks(i, b, 4, deltas);
+#elif defined(USE_32BIT_ATTACKS)
         b = index_to_bitboard(k, mask[i]);
         attacks[index + 
                  (unsigned(int(b) * int(mult[i]) ^ 
