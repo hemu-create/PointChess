@@ -24,23 +24,18 @@ def setup_ddp():
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
         rank = int(os.environ["RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
-        local_rank = int(os.environ["LOCAL_RANK"])
-    elif torch.cuda.is_available() and torch.cuda.device_count() > 1:
-        rank = 0
-        world_size = torch.cuda.device_count()
-        local_rank = 0
-    else:
-        rank = 0
-        world_size = 1
-        local_rank = 0
-
-    is_distributed = world_size > 1
-    if is_distributed:
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        is_distributed = True
         dist.init_process_group(
             backend="nccl" if torch.cuda.is_available() else "gloo",
             init_method="env://"
         )
         torch.cuda.set_device(local_rank)
+    else:
+        rank = 0
+        world_size = 1
+        local_rank = 0
+        is_distributed = False
 
     return rank, world_size, local_rank, is_distributed
 
@@ -55,8 +50,8 @@ def train_4b(args):
 
     if is_main:
         print("=" * 65)
-        print(" PointChess 4-Billion Position High-Throughput Trainer")
-        print(f" GPUs: {world_size}x Tesla T4 | Device: {device} | DDP: {is_distributed}")
+        print(" PointChess 1B/4B High-Throughput NNUE Trainer")
+        print(f" GPUs: {torch.cuda.device_count()} | Device: {device} | DDP: {is_distributed}")
         print(f" Batch Size: {args.batch_size:,} | Total Target: {args.max_positions:,} positions")
         print(f" Mixed Precision: AMP fp16 | Activation: SCReL")
         print("=" * 65)
@@ -70,7 +65,9 @@ def train_4b(args):
         print(f" FT width: {args.ft_size} | Params: {sum(p.numel() for p in model.parameters()):,}")
     if is_distributed:
         model = DDP(model, device_ids=[local_rank] if torch.cuda.is_available() else None)
-    raw_model = model.module if is_distributed else model
+    elif torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
+    raw_model = model.module if (is_distributed or isinstance(model, nn.DataParallel)) else model
 
     # 2. Optimizer & LR Scheduler (OneCycleLR with warmup)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)

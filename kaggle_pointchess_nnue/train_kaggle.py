@@ -50,17 +50,11 @@ if os.path.exists(data_file):
 ckpt_dir = "/kaggle/working/checkpoints_1b"
 os.makedirs(ckpt_dir, exist_ok=True)
 
-print(f"\n[Step 3/4] Training 1-Billion Positions on {num_gpus}x Tesla T4 GPUs (DDP + AMP fp16)...")
-if num_gpus >= 2:
-    train_cmd = (f"cd {SRC}/training && torchrun --nproc_per_node=2 train_4b.py "
-                 f"--data_file {data_file} --max_positions 1000000000 "
-                 f"--batch_size 2048 --lr 5e-4 --ft_size 256 --output_dir {ckpt_dir} "
-                 f"--log_interval 100 --save_interval 2000")
-else:
-    train_cmd = (f"cd {SRC}/training && python3 train_4b.py "
-                 f"--data_file {data_file} --max_positions 1000000000 "
-                 f"--batch_size 2048 --lr 5e-4 --ft_size 256 --output_dir {ckpt_dir} "
-                 f"--log_interval 100 --save_interval 2000")
+print(f"\n[Step 3/4] Training 1-Billion Positions on {num_gpus}x Tesla T4 GPUs (DataParallel + AMP fp16)...")
+train_cmd = (f"cd {SRC}/training && python3 train_4b.py "
+             f"--data_file {data_file} --max_positions 1000000000 "
+             f"--batch_size 2048 --lr 5e-4 --ft_size 256 --output_dir {ckpt_dir} "
+             f"--log_interval 100 --save_interval 2000")
 subprocess.run(train_cmd, shell=True, check=True)
 
 print("\n[Step 4/4] Exporting 1-Billion Position Trained .pchess and .pnet Networks...")
