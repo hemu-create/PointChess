@@ -432,17 +432,17 @@ void think(const Position &pos, bool infinite, bool ponder, int time,
 
     if(!movesToGo) { // Sudden death time control
       if(increment > 0) {
-        MaxSearchTime = available_time / 30 + (increment / 2);
-        AbsoluteMaxSearchTime = Min(available_time, available_time / 4 + increment);
+        MaxSearchTime = available_time / 20 + (increment * 3 / 4);
+        AbsoluteMaxSearchTime = Min(available_time, available_time / 3 + increment);
       }
       else { // Blitz game without increment
-        MaxSearchTime = available_time / 40;
-        AbsoluteMaxSearchTime = Min(available_time, available_time / 8);
+        MaxSearchTime = available_time / 25;
+        AbsoluteMaxSearchTime = Min(available_time, available_time / 6);
       }
     }
     else { // (x moves) / (y minutes)
-      MaxSearchTime = available_time / Min(movesToGo, 30) + (increment / 2);
-      AbsoluteMaxSearchTime = Min(available_time, (2 * available_time) / Min(movesToGo, 10));
+      MaxSearchTime = available_time / Min(movesToGo, 25) + (increment * 3 / 4);
+      AbsoluteMaxSearchTime = Min(available_time, (2 * available_time) / Min(movesToGo, 8));
     }
     if(AbsoluteMaxSearchTime <= 0) AbsoluteMaxSearchTime = 1;
     if(MaxSearchTime > AbsoluteMaxSearchTime) MaxSearchTime = AbsoluteMaxSearchTime;
@@ -632,7 +632,7 @@ namespace {
         if (AbortSearch)
           break;
         if (result <= alpha) {
-          beta = alpha;
+          beta = (alpha + beta) / 2;
           alpha = Max(result - delta, -VALUE_INFINITE);
         } else if (result >= beta) {
           beta = Min(result + delta, VALUE_INFINITE);
@@ -682,10 +682,8 @@ namespace {
             BestMoveChangesByIteration[Iteration] * (MaxSearchTime / 2) +
             BestMoveChangesByIteration[Iteration-1] * (MaxSearchTime / 3);
 
-        // Stop search if most of MaxSearchTime is consumed at the end of the
-        // iteration.  We probably don't have enough time to search the first
-        // move at the next iteration anyway.
-        if(current_search_time() > ((MaxSearchTime + ExtraSearchTime)*80) / 128)
+        // Stop search if MaxSearchTime is consumed at the end of the iteration
+        if(current_search_time() >= (MaxSearchTime + ExtraSearchTime))
           stopSearch = true;
 
         if(stopSearch) {
@@ -782,7 +780,7 @@ namespace {
       pos.do_move(move, u, dcCandidates);
 
       if(i < MultiPV) {
-        value = -search_pv(pos, ss, -beta, VALUE_INFINITE, newDepth, 1, 0);
+        value = -search_pv(pos, ss, -beta, -alpha, newDepth, 1, 0);
         // If the value has dropped a lot compared to the last iteration,
         // set the boolean variable Problem to true.  This variable is used
         // for time managment:  When Problem is true, we try to complete the
