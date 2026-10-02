@@ -256,15 +256,18 @@ int MegaNNUE1024::evaluate(const int* wf, int nw, const int* bf, int nb, int stm
     alignas(32) int32_t l1[BIG_L1_SIZE], l2[BIG_L2_SIZE];
     for (int o = 0; o < BIG_L1_SIZE; ++o) {
         int64_t dot = dot_i32_i8_avx2(l0, net.l1_weights.data() + size_t(o) * FT * 2, FT * 2);
-        l1[o] = screl_i32(int32_t(net.l1_biases[o] * WEIGHT_SCALE_L0 + dot) / (WEIGHT_SCALE_L0 * 8));
+        int32_t sum = int32_t(net.l1_biases[o] / 2 + dot);
+        l1[o] = screl_i32(sum / 128);
     }
     for (int o = 0; o < BIG_L2_SIZE; ++o) {
         int64_t dot = dot_i32_i8_avx2(l1, net.l2_weights.data() + size_t(o) * BIG_L1_SIZE, BIG_L1_SIZE);
-        l2[o] = screl_i32(int32_t(net.l2_biases[o] * WEIGHT_SCALE_L1 + dot) / (WEIGHT_SCALE_L1 * 4));
+        int32_t sum = int32_t(net.l2_biases[o] / 2 + dot);
+        l2[o] = screl_i32(sum / 64);
     }
     int64_t out_dot = dot_i32_i8_avx2(l2, net.out_weights.data(), BIG_L2_SIZE);
-    int32_t sum = int32_t(net.out_bias * WEIGHT_SCALE_L2 + out_dot);
-    return std::clamp(sum / 256, -1500, 1500);
+    int32_t sum = int32_t(net.out_bias + out_dot);
+    int score = sum / 128;
+    return std::clamp(score, -1500, 1500);
 }
 
 bool NNUEEvaluation::load_pchess_file(const std::string& filepath) {
