@@ -1519,8 +1519,23 @@ namespace {
     if(pos.is_draw())
       return VALUE_DRAW;
 
+    // Transposition table lookup in qsearch
+    Value ttValue;
+    Depth ttDepth;
+    Move ttMove = MOVE_NONE;
+    ValueType ttValueType;
+    bool ttFound = TT.retrieve(pos, &ttValue, &ttDepth, &ttMove, &ttValueType);
+    if(ttFound && !pos.is_check()) {
+      ttValue = value_from_tt(ttValue, ply);
+      if((is_lower_bound(ttValueType) && ttValue >= beta) ||
+         (is_upper_bound(ttValueType) && ttValue <= alpha) ||
+         (ttValueType == VALUE_TYPE_EXACT)) {
+        return ttValue;
+      }
+    }
+
     // Evaluate the position statically:
-    staticValue = evaluate(pos, ei, threadID);
+    staticValue = evaluate(pos, ei, threadID, ply);
 
     if(ply == PLY_MAX - 1) return staticValue;
 
@@ -1610,6 +1625,11 @@ namespace {
       return value_mated_in(ply);
 
     assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
+
+    if(!AbortSearch && !thread_should_stop(threadID) && !pos.is_check()) {
+      ValueType vt = (bestValue >= beta) ? VALUE_TYPE_LOWER : VALUE_TYPE_UPPER;
+      TT.store(pos, value_to_tt(bestValue, ply), Depth(0), MOVE_NONE, vt);
+    }
 
     return bestValue;
   }
