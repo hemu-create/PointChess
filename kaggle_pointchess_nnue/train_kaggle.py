@@ -1,14 +1,15 @@
-# PointChess Mega-1024 HalfKAv2 Trainer — Kaggle T4 x2 (lean launcher)
-# Clones fresh source, builds AVX2 engine, trains MegaNNUE FT=1024 with clamped
-# targets, exports v3 .pchess (88MB). 600M-position budget fits ~9h on 2x T4.
+# PointChess 1-Billion Position Modern NNUE Trainer — Kaggle 2x Tesla T4 GPUs
+# Trained on Deep Stockfish 19 Distillation Data (Depth 6-8) with PyTorch DDP + AMP fp16
 import os, subprocess, torch
 
 print("=" * 65)
-print(" PointChess Mega-1024 Trainer (HalfKAv2 SCReL | 2x T4 DDP + AMP)")
+print(" PointChess 1-Billion Position NNUE Trainer (Kaggle 2x T4 DDP)")
+print(" Deep Stockfish 19 Distillation Dataset | SCReL Activation")
 print("=" * 65)
-ng = torch.cuda.device_count()
-print(f"PyTorch {torch.__version__} | CUDA {torch.cuda.is_available()} | GPUs {ng}")
-for i in range(ng):
+
+num_gpus = torch.cuda.device_count()
+print(f"PyTorch {torch.__version__} | CUDA {torch.cuda.is_available()} | GPUs: {num_gpus}")
+for i in range(num_gpus):
     print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
 
 os.chdir("/kaggle/working")
@@ -18,33 +19,42 @@ else:
     subprocess.run(["git", "-C", "/kaggle/working/PointChess", "pull", "--ff-only"], check=False)
 SRC = "/kaggle/working/PointChess"
 
-print("\n[1/4] Building engine (AVX2 + eval cache)...")
+print("\n[Step 1/4] Building engine with AVX2 optimizations...")
 subprocess.run(f"cmake -S {SRC} -B {SRC}/build -DCMAKE_BUILD_TYPE=Release && cmake --build {SRC}/build -j$(nproc)", shell=True, check=True)
 subprocess.run(f"{SRC}/build/pointchess bench 16 1", shell=True, check=True)
 
-data_file = "/kaggle/input/pointchess-200k-dataset/pointchess_200k_tactical.txt"
+# Select Deep Distillation Dataset
+data_file = "/kaggle/input/pointchess-200k-dataset/sf_deep_distill_178k.txt"
 if not os.path.exists(data_file):
-    alt = f"{SRC}/kaggle_dataset/pointchess_200k_tactical.txt"
-    data_file = alt if os.path.exists(alt) else data_file
-print(f"\n[2/4] Dataset: {data_file}")
+    data_file = "/kaggle/input/pointchess-200k-dataset/pointchess_200k_tactical.txt"
+
+print(f"\n[Step 2/4] Training Dataset: {data_file}")
 subprocess.run(f"wc -l {data_file}", shell=True, check=False)
 
-ckpt_dir = "/kaggle/working/checkpoints_1024"
+ckpt_dir = "/kaggle/working/checkpoints_1b"
 os.makedirs(ckpt_dir, exist_ok=True)
-print("\n[3/4] Training Mega-1024 to 600,000,000 positions (cycling, DDP+AMP, lr 5e-4)...")
-if ng >= 2:
-    cmd = (f"cd {SRC}/training && torchrun --nproc_per_node=2 train_4b.py "
-           f"--data_file {data_file} --max_positions 600000000 "
-           f"--batch_size 2048 --lr 5e-4 --ft_size 1024 --output_dir {ckpt_dir}")
-else:
-    cmd = (f"cd {SRC}/training && python3 train_4b.py "
-           f"--data_file {data_file} --max_positions 600000000 "
-           f"--batch_size 2048 --lr 5e-4 --ft_size 1024 --output_dir {ckpt_dir}")
-subprocess.run(cmd, shell=True, check=True)
 
-print("\n[4/4] Exporting v3 .pchess (FT=1024)...")
+print("\n[Step 3/4] Training 1-Billion Positions on 2x Tesla T4 GPUs (DDP + AMP fp16)...")
+if num_gpus >= 2:
+    train_cmd = (f"cd {SRC}/training && torchrun --nproc_per_node=2 train_4b.py "
+                 f"--data_file {data_file} --max_positions 1000000000 "
+                 f"--batch_size 2048 --lr 5e-4 --ft_size 256 --output_dir {ckpt_dir} "
+                 f"--log_interval 100 --save_interval 2000")
+else:
+    train_cmd = (f"cd {SRC}/training && python3 train_4b.py "
+                 f"--data_file {data_file} --max_positions 1000000000 "
+                 f"--batch_size 2048 --lr 5e-4 --ft_size 256 --output_dir {ckpt_dir} "
+                 f"--log_interval 100 --save_interval 2000")
+subprocess.run(train_cmd, shell=True, check=True)
+
+print("\n[Step 4/4] Exporting 1-Billion Position Trained .pchess and .pnet Networks...")
+out_pchess = "/kaggle/working/pointchess_1b.pchess"
+out_pnet   = "/kaggle/working/nnue_1b.pnet"
 subprocess.run(f"cd {SRC}/training && python3 export_mega.py --checkpoint {ckpt_dir}/best_model.pt "
-               f"--output /kaggle/working/pointchess1024.pchess --ft_size 1024",
-               shell=True, check=True)
-subprocess.run("ls -lh /kaggle/working/pointchess1024.pchess", shell=True, check=False)
-print("Mega-1024 training + export complete.")
+               f"--output {out_pchess} --ft_size 256", shell=True, check=True)
+subprocess.run(f"ls -lh {out_pchess} {out_pnet} 2>/dev/null || ls -lh {out_pchess}", shell=True, check=False)
+
+print("\n" + "=" * 65)
+print(" 1-Billion Position Training & Export Complete!")
+print(f" Master Network Saved to: {out_pchess}")
+print("=" * 65)

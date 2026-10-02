@@ -1141,29 +1141,32 @@ namespace {
       }
     }
 
-    Value approximateEval = quick_evaluate(pos);
+    Value eval = evaluate(pos, ei, threadID);
+    ss[ply].staticEval = eval;
+    bool improving = (ply >= 2 && ss[ply-2].staticEval != VALUE_NONE && eval > ss[ply-2].staticEval);
+
+    Value approximateEval = eval;
     bool mateThreat = false;
 
     // Reverse Futility Pruning (Static Null Move Pruning / RFP)
-    if(!pos.is_check() && depth <= 5 * OnePly
+    if(!pos.is_check() && depth <= 6 * OnePly
        && (pos.non_pawn_material(WHITE) > Value(0) || pos.non_pawn_material(BLACK) > Value(0))
        && abs(beta) < VALUE_KNOWN_WIN) {
-      Value eval = evaluate(pos, ei, threadID);
-      Value rfpMargin = Value((100 * int(depth)) / int(OnePly));
+      Value rfpMargin = Value(((improving ? 80 : 60) * int(depth)) / int(OnePly));
       if(eval - rfpMargin >= beta)
         return eval - rfpMargin;
     }
 
     // Null move search
     if(!pos.is_check() && allowNullmove && ok_to_do_nullmove(pos)
-       && approximateEval >= beta - NullMoveMargin) {
+       && eval >= beta - NullMoveMargin) {
       UndoInfo u;
       Value nullValue;
 
       ss[ply].currentMove = MOVE_NULL;
       pos.do_null_move(u);
-      Depth R = (3 + int(depth / (4 * OnePly))) * OnePly;
-      if(approximateEval - beta > Value(150)) R += OnePly;
+      Depth R = (3 + int(depth / (3 * OnePly)) + (improving ? 1 : 0)) * OnePly;
+      if(eval - beta > Value(200)) R += OnePly;
       if(R >= depth) R = depth - OnePly;
       nullValue = -search(pos, ss, -(beta-1), depth - R, ply+1, false,
                           threadID);
@@ -1201,11 +1204,9 @@ namespace {
         return v;
     }
 
-    // Internal iterative deepening
-    if(UseIIDAtNonPVNodes && ttMove == MOVE_NONE && depth >= 8*OnePly &&
-       evaluate(pos, ei, threadID) >= beta - IIDMargin) {
-      search(pos, ss, beta, Min(depth/2, depth-2*OnePly), ply, false, threadID);
-      ttMove = ss[ply].pv[ply];
+    // Internal Iterative Reduction (IIR): if no TT move at depth >= 5, reduce search depth by 1 ply
+    if(ttMove == MOVE_NONE && depth >= 5*OnePly) {
+      depth -= OnePly;
     }
 
     // ProbCut (Stockfish-style, cf. tools/sf_ref/search.cpp Step 14):
@@ -1319,7 +1320,7 @@ namespace {
       if (ext == Depth(0) && !moveIsCapture && !move_promotion(move)
           && !moveIsCheck && !moveIsPassedPawnPush && depth <= 8*OnePly) {
         int d_ply = int(depth / OnePly);
-        int lmpThreshold = 3 + d_ply * d_ply;
+        int lmpThreshold = (3 + d_ply * d_ply) / (improving ? 1 : 2);
         if (moveCount > lmpThreshold)
           continue;
       }
@@ -1964,6 +1965,7 @@ namespace {
       ss[i].threatMove = MOVE_NONE;
       ss[i].reduction = Depth(0);
       ss[i].excludedMove = MOVE_NONE;
+      ss[i].staticEval = VALUE_NONE;
     }
   }
 
@@ -1992,6 +1994,7 @@ namespace {
     ss[ply+2].mateKiller = MOVE_NONE;
     ss[ply+2].killer1 = ss[ply+2].killer2 = MOVE_NONE;
     ss[ply+2].excludedMove = MOVE_NONE;
+    ss[ply+2].staticEval = VALUE_NONE;
     ss[ply].threatMove = MOVE_NONE;
     ss[ply].reduction = Depth(0);
     ss[ply].currentMoveCaptureValue = Value(0);
