@@ -2194,7 +2194,7 @@ namespace {
        && pos.type_of_piece_on(move_to(m)) != PAWN && pos.see(m) >= 0)
       result += OnePly/2;
 
-    return Min(result, OnePly);
+    return Min(result, 2 * OnePly);
   }
 
 

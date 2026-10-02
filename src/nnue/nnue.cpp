@@ -161,23 +161,23 @@ int NNUEEvaluation::evaluate_accumulators(const BigAccumulator& us_acc, const Bi
     for (int o = 0; o < BIG_L1_SIZE; ++o) {
         int64_t dot = dot_i32_i8_avx2(l0_out, net.l1_weights + o * (BIG_ACCUMULATOR_SIZE * 2),
                                       BIG_ACCUMULATOR_SIZE * 2);
-        int32_t sum = int32_t(net.l1_biases[o] * WEIGHT_SCALE_L0 + dot);
-        l1_out[o] = screl_i32(sum / (WEIGHT_SCALE_L0 * 8));
+        int32_t sum = int32_t(net.l1_biases[o] + dot);
+        l1_out[o] = screl_i32(sum / 64);
     }
 
     // 3. Linear Layer 2: 32 -> 32 (AVX2 dot)
     alignas(32) int32_t l2_out[BIG_L2_SIZE];
     for (int o = 0; o < BIG_L2_SIZE; ++o) {
         int64_t dot = dot_i32_i8_avx2(l1_out, net.l2_weights + o * BIG_L1_SIZE, BIG_L1_SIZE);
-        int32_t sum = int32_t(net.l2_biases[o] * WEIGHT_SCALE_L1 + dot);
-        l2_out[o] = screl_i32(sum / (WEIGHT_SCALE_L1 * 4));
+        int32_t sum = int32_t(net.l2_biases[o] + dot);
+        l2_out[o] = screl_i32(sum / 64);
     }
 
     // 4. Output Layer: 32 -> 1 (AVX2 dot)
     int64_t out_dot = dot_i32_i8_avx2(l2_out, net.out_weights, BIG_L2_SIZE);
-    int32_t sum = int32_t(net.out_bias * WEIGHT_SCALE_L2 + out_dot);
+    int32_t sum = int32_t(net.out_bias + out_dot);
 
-    int score = sum / 256;
+    int score = int(sum / 16);
     return std::clamp(score, -1500, 1500);
 }
 
