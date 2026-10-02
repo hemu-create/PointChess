@@ -119,8 +119,8 @@ namespace {
     { "Razoring Margin", "300", "300", SPIN, 150, 600, {""} },
     { "Randomness", "0", "0", SPIN, 0, 10, {""} },
     { "Minimum Split Depth", "4", "4", SPIN, 4, 7, {""} },
-    { "Maximum Number of Threads per Split Point", "5", "5", SPIN, 4, 8, {""} },
-    { "Threads", "1", "1", SPIN, 1, 8, {""} },
+    { "Maximum Number of Threads per Split Point", "5", "5", SPIN, 1, 64, {""} },
+    { "Threads", "1", "1", SPIN, 1, 64, {""} },
     { "Hash", "32", "32", SPIN, 4, 4096, {""} },
     { "Clear Hash", "false", "false", BUTTON, 0, 0, {""} },
     { "Ponder", "true", "true", CHECK, 0, 0, {""} },
@@ -155,12 +155,8 @@ void init_uci_options() {
   o = option_with_name("Threads");
   assert(o != NULL);
 
-  // Limit the default value of "Threads" to 7 even if we have 8 CPU cores.
-  // According to Ken Dail's tests, Glaurung plays much better with 7 than
-  // with 8 threads.  This is weird, but it is probably difficult to find out
-  // why before I have a 8-core computer to experiment with myself.
-  sprintf(o->defaultValue, "%d", Min(cpu_count(), 7));
-  sprintf(o->currentValue, "%d", Min(cpu_count(), 7));
+  sprintf(o->defaultValue, "%d", Min(cpu_count(), 128));
+  sprintf(o->currentValue, "%d", Min(cpu_count(), 128));
 
   // Increase the minimum split depth when the number of CPUs is big.
   // It would probably be better to let this depend on the number of threads

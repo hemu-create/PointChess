@@ -249,8 +249,8 @@ namespace {
 
 
   // Pawn and material hash tables, indexed by the current thread id:
-  PawnInfoTable *PawnTable[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-  MaterialInfoTable *MaterialTable[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  PawnInfoTable *PawnTable[THREAD_MAX] = {0};
+  MaterialInfoTable *MaterialTable[THREAD_MAX] = {0};
 
   // Sizes of pawn and material hash tables:
   const int PawnTableSize = 16384;

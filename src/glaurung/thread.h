@@ -35,7 +35,7 @@
 //// Constants and variables
 ////
 
-const int THREAD_MAX = 8;
+const int THREAD_MAX = 64;
 
 
 ////
