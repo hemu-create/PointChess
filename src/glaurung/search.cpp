@@ -996,6 +996,8 @@ namespace {
         }
       }
 
+      Piece movingPiecePV = pos.piece_on(move_from(move));
+
       // Make and search the move.
       pointchess::nnue::update_accumulator_move(pos, move, ply, threadID);
       pos.do_move(move, u, dcCandidates);
@@ -1012,7 +1014,7 @@ namespace {
           if(move == ss[ply].killer1 || move == ss[ply].killer2 || move == countermove)
             r = Max(Depth(0), r - OnePly);
 
-          int hist = H.move_ordering_score(pos.piece_on(move_from(move)), move, prevMove, prevPiece, prevMove2, prevPiece2);
+          int hist = H.move_ordering_score(movingPiecePV, move, prevMove, prevPiece, prevMove2, prevPiece2);
           if (hist > 4000) r = Max(Depth(0), r - OnePly);
           else if (hist < -4000) r += OnePly;
           if(r >= newDepth) r = newDepth - OnePly;
