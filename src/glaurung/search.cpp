@@ -33,6 +33,7 @@
 #include "book.h"
 #include "evaluate.h"
 #include "history.h"
+#include "../eval/nnue_eval.h"
 #include "mersenne.h"
 #include "misc.h"
 #include "movepick.h"
@@ -777,6 +778,7 @@ namespace {
       newDepth = (Iteration-2)*OnePly + ext + InitialDepth;
 
       // Make the move, and search it.
+      pointchess::nnue::update_accumulator_move(pos, move, 0, 0);
       pos.do_move(move, u, dcCandidates);
 
       if(i < MultiPV) {
@@ -972,6 +974,7 @@ namespace {
       newDepth = depth - OnePly + ext;
 
       // Make and search the move.
+      pointchess::nnue::update_accumulator_move(pos, move, ply, threadID);
       pos.do_move(move, u, dcCandidates);
       
       if(moveCount == 1) 
@@ -1355,6 +1358,7 @@ namespace {
       Piece movingPiece = pos.piece_on(move_from(move));
 
       // Make and search the move.
+      pointchess::nnue::update_accumulator_move(pos, move, ply, threadID);
       pos.do_move(move, u, dcCandidates);
       
       if(depth >= 2*OnePly && ext == Depth(0) && moveCount >= 2
@@ -1543,6 +1547,7 @@ namespace {
         continue;
 
       // Make and search the move.
+      pointchess::nnue::update_accumulator_move(pos, move, ply, threadID);
       pos.do_move(move, u, dcCandidates);
       value = -qsearch(pos, ss, -beta, -alpha, depth-OnePly, ply+1, threadID);
       pos.undo_move(move, u);

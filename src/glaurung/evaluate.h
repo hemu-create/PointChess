@@ -98,7 +98,7 @@ struct EvalInfo {
 //// Prototypes
 ////
 
-extern Value evaluate(const Position &pos, EvalInfo &ei, int threadID);
+extern Value evaluate(const Position &pos, EvalInfo &ei, int threadID, int ply = 0);
 extern Value quick_evaluate(const Position &pos);
 extern void init_eval(int threads);
 extern void quit_eval();

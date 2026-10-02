@@ -292,13 +292,13 @@ namespace {
 /// values, an endgame score and a middle game score, and interpolates
 /// between them based on the remaining material.
 
-Value evaluate(const Position &pos, EvalInfo &ei, int threadID) {
+Value evaluate(const Position &pos, EvalInfo &ei, int threadID, int ply) {
   Color stm = pos.side_to_move();
 
   if (pointchess::EvaluationManager::instance().get_config().use_nnue &&
       pointchess::EvaluationManager::instance().active_backend() != pointchess::BACKEND_CPU_CLASSICAL &&
       (pointchess::nnue::GlobalNNUE.is_loaded() || pointchess::nnue::GlobalMega1024.is_loaded() || pointchess::pointbeta::GlobalPointBeta.is_loaded())) {
-    Value raw_val = pointchess::nnue::evaluate_nnue(pos);
+    Value raw_val = pointchess::nnue::evaluate_nnue(pos, ply, threadID);
 
     auto& mgr = pointchess::EvaluationManager::instance();
     if (mgr.active_personality() != pointchess::PERSONALITY_DEFAULT) {
