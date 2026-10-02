@@ -56,7 +56,7 @@ TranspositionTable::~TranspositionTable() {
 void TranspositionTable::set_size(unsigned mbSize) {
   unsigned newSize;
 
-  assert(mbSize >= 4 && mbSize <= 1024);
+  assert(mbSize >= 4 && mbSize <= 16384);
 
   for(newSize = 1024; newSize * 4 * (sizeof(TTEntry)) <= (mbSize << 20);
       newSize *= 2);
@@ -105,7 +105,10 @@ void TranspositionTable::store(const Position &pos, Value v, Depth d,
     if((tte+i)->key() == pos.get_key()) {
       if(m == MOVE_NONE)
         m = (tte+i)->move();
-      *(tte+i) = TTEntry(pos.get_key(), v, type, d, m, generation);
+      // Only overwrite if new search depth is greater/equal, or if exact score, or stale generation
+      if(d >= (tte+i)->depth() || type == VALUE_TYPE_EXACT || (tte+i)->generation() != generation) {
+        *(tte+i) = TTEntry(pos.get_key(), v, type, d, m, generation);
+      }
       return;
     }
     if(replace->generation() == generation) {
