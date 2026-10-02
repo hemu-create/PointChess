@@ -312,7 +312,7 @@ void think(const Position &pos, bool infinite, bool ponder, int time,
     Move bookMove;
     if(get_option_value_string("Book File") != OpeningBook.file_name()) {
       OpeningBook.close();
-      OpeningBook.open("book.bin");
+      OpeningBook.open(get_option_value_string("Book File"));
     }
     bookMove = OpeningBook.get_move(pos);
     if(bookMove != MOVE_NONE) {
