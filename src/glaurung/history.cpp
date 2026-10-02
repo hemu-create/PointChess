@@ -60,6 +60,7 @@ void History::clear() {
   memset(contHistory, 0, 16 * 64 * 16 * 64 * sizeof(int));
   memset(contHistory2Ply, 0, 16 * 64 * 16 * 64 * sizeof(int));
   memset(captureHistory, 0, 16 * 64 * 8 * sizeof(int));
+  memset(pawnCorrectionHistory, 0, 2 * 16384 * sizeof(int16_t));
 }
 
 void History::update_countermove(Move prevMove, Move refutation) {
@@ -73,6 +74,17 @@ Move History::get_countermove(Move prevMove) const {
     return countermoves[move_from(prevMove)][move_to(prevMove)];
   }
   return MOVE_NONE;
+}
+
+void History::update_pawn_correction(Color c, Key pawnKey, int bonus) {
+  int idx = int(pawnKey & 16383);
+  int clampedBonus = std::max(-1024, std::min(1024, bonus));
+  int val = pawnCorrectionHistory[c][idx];
+  pawnCorrectionHistory[c][idx] = int16_t(val + clampedBonus - val * std::abs(clampedBonus) / 1024);
+}
+
+int History::get_pawn_correction(Color c, Key pawnKey) const {
+  return pawnCorrectionHistory[c][int(pawnKey & 16383)];
 }
 
 void History::capture_success(Piece p, Move m, PieceType cap, Depth d) {

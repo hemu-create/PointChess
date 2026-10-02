@@ -300,19 +300,20 @@ Value evaluate(const Position &pos, EvalInfo &ei, int threadID, int ply) {
       (pointchess::nnue::GlobalNNUE.is_loaded() || pointchess::nnue::GlobalMega1024.is_loaded() || pointchess::pointbeta::GlobalPointBeta.is_loaded())) {
     Value raw_val = pointchess::nnue::evaluate_nnue(pos, ply, threadID);
 
+    int pCorr = H.get_pawn_correction(stm, pos.get_pawn_key());
+    int v = int(raw_val) + (pCorr / 16);
+
     auto& mgr = pointchess::EvaluationManager::instance();
     if (mgr.active_personality() != pointchess::PERSONALITY_DEFAULT) {
       int aggr = mgr.get_aggressiveness_mult();
       int cow = mgr.get_cowardice_mult();
-      int v = int(raw_val);
       if (v > 0) {
         v = (v * aggr) / 100;
       } else if (v < 0) {
         v = (v * (200 - cow)) / 100;
       }
-      return Value(v);
     }
-    return raw_val;
+    return Value(v);
   }
 
   ScaleFactor factor[2] = {SCALE_FACTOR_NORMAL, SCALE_FACTOR_NORMAL};

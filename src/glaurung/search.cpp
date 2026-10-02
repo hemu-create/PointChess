@@ -1482,6 +1482,12 @@ namespace {
         }
         TT.store(pos, value_to_tt(bestValue, ply), depth, m, VALUE_TYPE_LOWER);
       }
+
+      // Update Pawn Correction History
+      if(!pos.is_check() && abs(bestValue) < VALUE_KNOWN_WIN && ss[ply].staticEval != VALUE_NONE) {
+        int bonus = std::max(-1024, std::min(1024, (int(bestValue) - int(ss[ply].staticEval)) * 16));
+        H.update_pawn_correction(pos.side_to_move(), pos.get_pawn_key(), bonus);
+      }
     }
 
     return bestValue;

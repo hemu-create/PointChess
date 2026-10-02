@@ -24,9 +24,11 @@
 //// Includes
 ////
 
+#include "color.h"
 #include "depth.h"
 #include "move.h"
 #include "piece.h"
+#include "types.h"
 
 
 ////
@@ -59,6 +61,9 @@ public:
   void update_countermove(Move prevMove, Move refutation);
   Move get_countermove(Move prevMove) const;
 
+  void update_pawn_correction(Color c, Key pawnKey, int bonus);
+  int get_pawn_correction(Color c, Key pawnKey) const;
+
 private:
   int history[16][64];  // [piece][square]
   int successCount[16][64];
@@ -67,6 +72,7 @@ private:
   int contHistory[16][64][16][64];     // 1-ply [prevPiece][prevTo][currPiece][currTo]
   int contHistory2Ply[16][64][16][64]; // 2-ply [prevPiece2][prevTo2][currPiece][currTo]
   int captureHistory[16][64][8];       // [piece][to][capturedType]
+  int16_t pawnCorrectionHistory[2][16384];
 };
 
 
