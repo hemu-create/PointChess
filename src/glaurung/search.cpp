@@ -675,15 +675,17 @@ namespace {
              current_search_time() > MaxSearchTime / 32)))
           stopSearch = true;
 
-        // Add some extra time if the best move has changed during the last
-        // two iterations:
-        if(Iteration > 5 && Iteration <= 50)
-          ExtraSearchTime =
-            BestMoveChangesByIteration[Iteration] * (MaxSearchTime / 2) +
-            BestMoveChangesByIteration[Iteration-1] * (MaxSearchTime / 3);
+        // Add extra time if the best move has changed or if position is complex
+        if(Iteration > 2 && Iteration <= 50) {
+          if (BestMoveChangesByIteration[Iteration] > 0 || BestMoveChangesByIteration[Iteration-1] > 0)
+            ExtraSearchTime = Max(ExtraSearchTime, MaxSearchTime * 3 / 4);
+          if (Problem)
+            ExtraSearchTime = Max(ExtraSearchTime, MaxSearchTime);
+        }
 
         // Stop search if MaxSearchTime is consumed at the end of the iteration
-        if(current_search_time() >= (MaxSearchTime + ExtraSearchTime))
+        int maxAllowedTime = Min(MaxSearchTime + ExtraSearchTime, AbsoluteMaxSearchTime - 15);
+        if(current_search_time() >= maxAllowedTime)
           stopSearch = true;
 
         if(stopSearch) {
@@ -2338,9 +2340,9 @@ namespace {
 
     // Should we stop the search?
     if(!PonderSearch && !InfiniteSearch) {
-      if(t >= AbsoluteMaxSearchTime)
+      if(t >= AbsoluteMaxSearchTime - 10)
         AbortSearch = true;
-      else if(Iteration >= 2 && t >= MaxSearchTime + ExtraSearchTime)
+      else if(Iteration >= 2 && t >= Min(MaxSearchTime + ExtraSearchTime, AbsoluteMaxSearchTime - 15))
         AbortSearch = true;
     }
 
