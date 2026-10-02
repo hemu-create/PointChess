@@ -1357,6 +1357,15 @@ namespace {
 
       Piece movingPiece = pos.piece_on(move_from(move));
 
+      // History / Continuation Pruning (Stockfish & Ethereal style):
+      // Prune quiet moves with strong negative continuation history at shallow depths
+      if (depth <= 3*OnePly && ext == Depth(0) && !moveIsCapture && !moveIsCheck
+          && !move_promotion(move) && move != countermove && move != ss[ply].killer1) {
+        int histScore = H.move_ordering_score(movingPiece, move, prevMove, prevPiece, prevMove2, prevPiece2);
+        if (histScore < -3000)
+          continue;
+      }
+
       // Make and search the move.
       pointchess::nnue::update_accumulator_move(pos, move, ply, threadID);
       pos.do_move(move, u, dcCandidates);
