@@ -1246,7 +1246,7 @@ namespace {
     if(depth >= 5*OnePly && !pos.is_check() && abs(beta) < VALUE_KNOWN_WIN
        && ss[ply].excludedMove == MOVE_NONE && ttMove != MOVE_NONE
        && !AbortSearch && !thread_should_stop(threadID)) {
-      Value probBeta = beta + Value(120);
+      Value probBeta = beta + Value(100);
       Depth probDepth = depth - 4*OnePly;
       MovePicker probMp = MovePicker(pos, false, ttMove, MOVE_NONE,
                                      MOVE_NONE, MOVE_NONE, probDepth);
@@ -1385,11 +1385,14 @@ namespace {
       Piece movingPiece = pos.piece_on(move_from(move));
 
       // History / Continuation Pruning (Stockfish & Ethereal style):
-      // Prune quiet moves with strong negative continuation history at shallow depths
-      if (depth <= 3*OnePly && ext == Depth(0) && !moveIsCapture && !moveIsCheck
-          && !move_promotion(move) && move != countermove && move != ss[ply].killer1) {
+      // Prune quiet moves with strong negative continuation history at shallow depths.
+      // Slightly stricter when not improving to buy depth for the forced lines.
+      if (depth <= 4*OnePly && ext == Depth(0) && !moveIsCapture && !moveIsCheck
+          && !move_promotion(move) && move != countermove && move != ss[ply].killer1
+          && move != ss[ply].killer2) {
         int histScore = H.move_ordering_score(movingPiece, move, prevMove, prevPiece, prevMove2, prevPiece2);
-        if (histScore < -3000)
+        int histLimit = improving ? -3000 : -2000;
+        if (histScore < histLimit)
           continue;
       }
 
@@ -1406,9 +1409,11 @@ namespace {
         if(move == ss[ply].killer1 || move == ss[ply].killer2 || move == countermove)
           r = Max(Depth(0), r - OnePly);
 
-        int hist = H.move_ordering_score(movingPiece, move, prevMove, prevPiece);
+        int hist = H.move_ordering_score(movingPiece, move, prevMove, prevPiece, prevMove2, prevPiece2);
         if (hist > 4000) r = Max(Depth(0), r - OnePly);
         else if (hist < -4000) r += OnePly;
+        if (!improving) r += OnePly / 2;
+        if (pos.see(move) < 0) r += OnePly / 2;
 
         if(r >= newDepth) r = newDepth - OnePly;
         ss[ply].reduction = r;
