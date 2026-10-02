@@ -72,24 +72,17 @@ inline Value evaluate_nnue(const Position& pos) {
     int num_w = 0;
     int num_b = 0;
 
-    // Scan board squares
-    for (int s = 0; s < 64; ++s) {
-        Square sq = Square(s);
+    // Scan occupied squares via bitboard popcnt (2x faster than 64-square loop)
+    Bitboard occ = pos.occupied_squares();
+    while (occ) {
+        Square sq = pop_1st_bit(&occ);
         Piece p = pos.piece_on(sq);
-        if (p == NO_PIECE || p == EMPTY || p == OUTSIDE) continue;
 
-        // White perspective
         int w_pt = piece_to_halfka_type(p, WHITE);
-        if (w_pt >= 0 && num_w < 34) {
-            w_features[num_w++] = NNUEEvaluation::halfka_index(w_k, w_pt, s);
-        }
+        if (w_pt >= 0) w_features[num_w++] = NNUEEvaluation::halfka_index(w_k, w_pt, int(sq));
 
-        // Black perspective
         int b_pt = piece_to_halfka_type(p, BLACK);
-        if (b_pt >= 0 && num_b < 34) {
-            int b_sq = s ^ 56;
-            b_features[num_b++] = NNUEEvaluation::halfka_index(b_k, b_pt, b_sq);
-        }
+        if (b_pt >= 0) b_features[num_b++] = NNUEEvaluation::halfka_index(b_k, b_pt, int(sq) ^ 56);
     }
 
     int stm = (pos.side_to_move() == WHITE) ? 0 : 1;

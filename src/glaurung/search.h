@@ -58,6 +58,7 @@ struct SearchStack {
   Move threatMove;
   Depth reduction;
   Move excludedMove; // Singular-extension excluded move (Stockfish-style)
+  Value staticEval;  // Static evaluation for improving heuristic
 };
 
 
