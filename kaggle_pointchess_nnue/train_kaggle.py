@@ -13,10 +13,9 @@ for i in range(num_gpus):
     print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
 
 os.chdir("/kaggle/working")
-if not os.path.exists("/kaggle/working/PointChess"):
-    subprocess.run(["git", "clone", "--depth", "1", "https://github.com/hemu-create/PointChess.git", "/kaggle/working/PointChess"], check=True)
-else:
-    subprocess.run(["git", "-C", "/kaggle/working/PointChess", "pull", "--ff-only"], check=False)
+# Always do a clean fresh clone to guarantee latest GitHub commit
+subprocess.run("rm -rf /kaggle/working/PointChess", shell=True)
+subprocess.run("git clone --depth 1 https://github.com/hemu-create/PointChess.git /kaggle/working/PointChess", shell=True, check=True)
 SRC = "/kaggle/working/PointChess"
 
 print("\n[Step 1/4] Building PointChess engine with native optimizations...")

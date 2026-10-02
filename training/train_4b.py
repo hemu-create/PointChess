@@ -65,9 +65,7 @@ def train_4b(args):
         print(f" FT width: {args.ft_size} | Params: {sum(p.numel() for p in model.parameters()):,}")
     if is_distributed:
         model = DDP(model, device_ids=[local_rank] if torch.cuda.is_available() else None)
-    elif torch.cuda.device_count() > 1:
-        model = nn.DataParallel(model)
-    raw_model = model.module if (is_distributed or isinstance(model, nn.DataParallel)) else model
+    raw_model = model.module if is_distributed else model
 
     # 2. Optimizer & LR Scheduler (OneCycleLR with warmup)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
