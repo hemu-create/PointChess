@@ -16,7 +16,7 @@ class StreamingChessDataset(IterableDataset):
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
         if not os.path.exists(self.data_file):
-            return
+            raise FileNotFoundError(f"dataset not found: {self.data_file}")
 
         with open(self.data_file, 'r', encoding='utf-8', errors='ignore') as f:
             for line_idx, line in enumerate(f):

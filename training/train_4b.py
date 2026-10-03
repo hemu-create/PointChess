@@ -92,11 +92,14 @@ def train_4b(args):
     model.train()
     # Infinite cycling over dataset to reach 4B positions from ~1.28M file
     # (3125 epochs needed). Reshuffles each pass via fresh DataLoader.
+    batches_this_epoch = 0
     while positions_seen < args.max_positions:
         epoch += 1
         if is_main and epoch > 1:
             print(f"--- Starting epoch pass {epoch} over dataset (seen {positions_seen:,} pos) ---")
+        batches_this_epoch = 0
         for batch in loader:
+            batches_this_epoch += 1
             if positions_seen >= args.max_positions:
                 break
             w_f = batch['w_features'].to(device, non_blocking=True)
@@ -146,6 +149,8 @@ def train_4b(args):
 
             if positions_seen >= args.max_positions:
                 break
+        if batches_this_epoch == 0:
+            raise RuntimeError(f"empty dataset pass, check data file: {args.data_file}")
 
     if is_main:
         best_path = os.path.join(args.output_dir, "best_model.pt")

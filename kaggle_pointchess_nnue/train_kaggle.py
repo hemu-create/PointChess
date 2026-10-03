@@ -35,7 +35,7 @@ os.makedirs(ckpt_dir, exist_ok=True)
 print("\n[Step 3/4] Training Mega-1024 on deep labels (600M, lr 5e-4)...")
 train_cmd = (f"cd {SRC}/training && python3 train_4b.py "
              f"--data_file {data_file} --max_positions 600000000 "
-             f"--batch_size 2048 --lr 5e-4 --ft_size 1024 --output_dir {ckpt_dir} "
+             f"--batch_size 1024 --lr 5e-4 --ft_size 1024 --output_dir {ckpt_dir} "
              f"--log_interval 100 --save_interval 2000")
 subprocess.run(train_cmd, shell=True, check=True)
 
